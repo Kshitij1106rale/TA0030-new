@@ -9,6 +9,7 @@ import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function Home() {
   const heroImage = PlaceHolderImages.find(img => img.id === 'hero-bg');
+  const howItWorksImage = PlaceHolderImages.find(img => img.id === 'how-it-works');
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -18,7 +19,7 @@ export default function Home() {
       <section className="relative pt-20 pb-32 overflow-hidden hero-gradient">
         <div className="container mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6 border border-primary/20">
-            <Zap className="w-4 h-4" />
+            < Zap className="w-4 h-4" />
             <span>Next-Gen Background Verification</span>
           </div>
           <h1 className="font-headline text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-slate-900">
@@ -49,7 +50,7 @@ export default function Home() {
                width={1200}
                height={800}
                className="rounded-xl"
-               data-ai-hint="dashboard tech"
+               data-ai-hint={heroImage?.imageHint || "dashboard tech"}
              />
           </div>
         </div>
@@ -127,14 +128,14 @@ export default function Home() {
               </div>
             </div>
             <div className="relative">
-              <div className="bg-primary rounded-3xl p-1 shadow-2xl">
+              <div className="bg-primary rounded-3xl p-1 shadow-2xl overflow-hidden">
                  <Image 
-                    src="https://picsum.photos/seed/tech2/600/600" 
+                    src={howItWorksImage?.imageUrl || "https://picsum.photos/seed/steps/600/800"} 
                     alt="Workflow Illustration" 
                     width={600} 
-                    height={600}
-                    className="rounded-3xl"
-                    data-ai-hint="technology process"
+                    height={800}
+                    className="rounded-3xl hover:scale-105 transition-transform duration-500"
+                    data-ai-hint={howItWorksImage?.imageHint || "modern architecture"}
                   />
               </div>
             </div>
