@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -18,11 +17,14 @@ export function DocumentUpload({ label, onUpload, isUploaded }: DocumentUploadPr
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setIsProcessing(true);
+      // Generate a unique ID to ensure state update triggers if re-uploading
+      const mockId = Math.random().toString(36).substring(7);
+      
       // Simulate reading file and OCR processing
       setTimeout(() => {
         setIsProcessing(false);
-        onUpload(`data:application/pdf;base64,mock_data_for_${label}`);
-      }, 2000);
+        onUpload(`data:application/pdf;base64,mock_data_${mockId}_for_${label}`);
+      }, 1500);
     }
   };
 
@@ -50,16 +52,16 @@ export function DocumentUpload({ label, onUpload, isUploaded }: DocumentUploadPr
                <span className="text-green-600 font-bold text-sm flex items-center gap-1">
                  <CheckCircle2 className="w-4 h-4" /> Ready
                </span>
-               <Button variant="ghost" size="icon" onClick={() => onUpload("")}>
+               <Button variant="ghost" size="icon" onClick={() => onUpload("")} title="Remove Document">
                  <X className="w-4 h-4" />
                </Button>
             </div>
           ) : (
             <label className="cursor-pointer">
-              <span className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-primary text-white hover:bg-primary/90">
+              <span className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-primary text-white hover:bg-primary/90 transition-colors">
                 Choose File
               </span>
-              <input type="file" className="hidden" onChange={handleFileChange} />
+              <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" />
             </label>
           )}
         </div>

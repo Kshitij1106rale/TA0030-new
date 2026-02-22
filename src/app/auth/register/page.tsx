@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -36,21 +35,25 @@ export default function RegisterPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       const user = userCredential.user;
+      
+      // Update Auth Profile
       await updateProfile(user, { displayName: name });
       
+      const timestamp = new Date().toISOString();
       const profileData = {
         id: user.uid,
         email,
         fullName: name,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: timestamp,
+        updatedAt: timestamp,
       };
 
+      // Crucial: Await Firestore document creation to ensure rules can see the profile immediately
       if (role === 'hr') {
         await setDoc(doc(db, 'hr_profiles', user.uid), {
           ...profileData,
-          companyName: "Default Corp",
-          department: "Human Resources",
+          companyName: "VeriHire Partners",
+          department: "Talent Acquisition",
         });
       } else {
         await setDoc(doc(db, 'candidate_profiles', user.uid), {
@@ -61,11 +64,15 @@ export default function RegisterPage() {
         });
       }
 
+      // Sync local auth store
       login(name, email, role);
+      
       toast({
         title: "Account Created",
-        description: `Welcome to VeriHire AI, ${name}!`,
+        description: `Welcome to VeriHire AI, ${name}! Your ${role === 'hr' ? 'recruiter' : 'candidate'} profile is ready.`,
       });
+      
+      // Navigate to dashboard
       router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
     } catch (error: any) {
       toast({
@@ -149,7 +156,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full h-11 bg-primary" disabled={isLoading}>
+              <Button type="submit" className="w-full h-11 bg-primary font-bold" disabled={isLoading}>
                 {isLoading ? "Creating Account..." : "Sign Up"}
               </Button>
             </form>

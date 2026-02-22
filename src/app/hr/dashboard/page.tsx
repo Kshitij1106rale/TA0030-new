@@ -13,7 +13,8 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Download,
-  Plus
+  Plus,
+  ShieldAlert
 } from 'lucide-react';
 import { 
   ResponsiveContainer,
@@ -27,6 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const COLORS = ['#4B0082', '#8F00FF', '#FF8042', '#FF0000'];
 
@@ -44,10 +46,10 @@ export default function HRDashboard() {
     if (!db || !firebaseUser) return null;
     return doc(db, 'hr_profiles', firebaseUser.uid);
   }, [db, firebaseUser]);
-  const { data: hrProfile, isLoading: isProfileLoading } = useDoc(hrProfileRef);
+  const { data: hrProfile, isLoading: isProfileLoading, error: profileError } = useDoc(hrProfileRef);
 
   const candidatesQuery = useMemoFirebase(() => {
-    // Only query if Firestore, authenticated user, AND their HR profile are available
+    // Only query if Firestore, authenticated user, AND their HR profile are available in DB
     if (!db || !firebaseUser || !hrProfile) return null;
     return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
   }, [db, firebaseUser, hrProfile]);
@@ -56,11 +58,11 @@ export default function HRDashboard() {
 
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !firebaseUser) {
+    if (!db || !firebaseUser || !hrProfile) {
       toast({
         variant: "destructive",
         title: "Action Denied",
-        description: "You must be logged in to add candidates.",
+        description: "Your HR profile must be verified to invite candidates.",
       });
       return;
     }
@@ -118,6 +120,23 @@ export default function HRDashboard() {
     { name: 'High Risk', value: highRiskCount },
   ];
 
+  if (profileError) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Navbar />
+        <main className="container mx-auto px-4 py-12">
+           <Alert variant="destructive" className="max-w-2xl mx-auto">
+             <ShieldAlert className="h-4 w-4" />
+             <AlertTitle>Access Restriction</AlertTitle>
+             <AlertDescription>
+               We couldn't verify your HR profile. Please ensure you registered as an HR personnel or contact support.
+             </AlertDescription>
+           </Alert>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar />
@@ -134,7 +153,7 @@ export default function HRDashboard() {
             
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-primary gap-2">
+                <Button className="bg-primary gap-2" disabled={!hrProfile}>
                   <Plus className="w-4 h-4" /> Add Candidate
                 </Button>
               </DialogTrigger>
