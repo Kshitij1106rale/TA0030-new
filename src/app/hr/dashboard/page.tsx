@@ -39,6 +39,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
 const COLORS = ['#4B0082', '#8F00FF', '#FF8042', '#FF0000'];
 
