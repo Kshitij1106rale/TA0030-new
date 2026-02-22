@@ -13,6 +13,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { ShieldCheck, Info, AlertTriangle, User, History } from 'lucide-react';
 import { extractCandidateDocumentData } from '@/ai/flows/extract-candidate-document-data';
 import { generateCandidateVerificationScores, CandidateVerificationOutput } from '@/ai/flows/generate-candidate-verification-scores';
+import { cn } from '@/lib/utils';
 
 export default function CandidateDashboard() {
   const { user } = useAuth();
