@@ -21,13 +21,16 @@ import {
   ShieldCheck,
   Mail,
   Briefcase,
-  History
+  History,
+  Info
 } from 'lucide-react';
 import { 
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  Tooltip,
+  Legend
 } from 'recharts';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc, serverTimestamp } from 'firebase/firestore';
@@ -118,16 +121,19 @@ export default function HRDashboard() {
 
   const totalCandidates = candidates?.length || 0;
   const highRiskCount = candidates?.filter(c => (c.fraudRiskScore || 0) > 60).length || 0;
+  const medRiskCount = candidates?.filter(c => (c.fraudRiskScore || 0) > 20 && (c.fraudRiskScore || 0) <= 60).length || 0;
+  const lowRiskCount = candidates?.filter(c => (c.fraudRiskScore || 0) <= 20).length || 0;
   const verifiedCount = candidates?.filter(c => c.profileStatus === 'verified').length || 0;
+  
   const avgTrustScore = candidates && candidates.length > 0 
     ? (candidates.reduce((acc, c) => acc + (c.trustScore || 0), 0) / candidates.length).toFixed(1)
     : "0.0";
 
   const riskDistribution = [
-    { name: 'Low Risk', value: candidates?.filter(c => (c.fraudRiskScore || 0) <= 20).length || 0 },
-    { name: 'Med Risk', value: candidates?.filter(c => (c.fraudRiskScore || 0) > 20 && (c.fraudRiskScore || 0) <= 60).length || 0 },
+    { name: 'Low Risk', value: lowRiskCount },
+    { name: 'Med Risk', value: medRiskCount },
     { name: 'High Risk', value: highRiskCount },
-  ];
+  ].filter(item => item.value > 0);
 
   if (!isAuthLoading && !isProfileLoading && !hrProfile && firebaseUser) {
     return (
@@ -257,34 +263,77 @@ export default function HRDashboard() {
           </div>
 
           <div className="space-y-6">
-            <Card className="border-none shadow-sm overflow-hidden">
-              <CardHeader className="bg-white border-b">
-                <CardTitle className="text-lg">Risk Insights</CardTitle>
+            <Card className="border-none shadow-sm overflow-hidden bg-white">
+              <CardHeader className="bg-white border-b pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-primary" />
+                  Risk Insights
+                </CardTitle>
                 <CardDescription>Major risk categories detected across your talent pool.</CardDescription>
               </CardHeader>
-              <CardContent className="h-[300px] pt-6 bg-white flex items-center justify-center">
+              <CardContent className="pt-6 pb-4">
                 {totalCandidates > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={riskDistribution}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={100}
-                        paddingAngle={8}
-                        dataKey="value"
-                      >
-                        {riskDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-white stroke-2" />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="space-y-6">
+                    <div className="h-[240px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={riskDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={85}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {riskDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-white stroke-2" />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                            itemStyle={{ fontWeight: 'bold' }}
+                          />
+                          <Legend verticalAlign="bottom" height={36}/>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-3 pt-2">
+                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-[#4B0082]" />
+                          <span className="text-xs font-medium text-slate-600">Low Risk</span>
+                        </div>
+                        <span className="text-sm font-bold">{lowRiskCount} candidates</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-[#8F00FF]" />
+                          <span className="text-xs font-medium text-slate-600">Medium Risk</span>
+                        </div>
+                        <span className="text-sm font-bold">{medRiskCount} candidates</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-[#FF8042]" />
+                          <span className="text-xs font-medium text-slate-600">High Risk</span>
+                        </div>
+                        <span className="text-sm font-bold text-red-500">{highRiskCount} candidates</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 flex gap-3">
+                      <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <p className="text-[11px] leading-relaxed text-slate-600">
+                        Risk categories are calculated based on AI analysis of document consistency and employment gap verification.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="text-center text-slate-400 space-y-2">
+                  <div className="text-center py-20 text-slate-400 space-y-2">
                     <TrendingUp className="w-10 h-10 mx-auto opacity-20" />
-                    <p className="text-sm">No data to visualize</p>
+                    <p className="text-sm">No verification data yet</p>
                   </div>
                 )}
               </CardContent>
