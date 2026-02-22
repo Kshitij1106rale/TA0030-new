@@ -20,19 +20,17 @@ service cloud.firestore {
     }
 
     match /candidate_profiles/{candidateProfileId} {
-      allow get, list: if isHR() || isOwner(candidateProfileId);
-      allow create: if isHR() || isOwner(candidateProfileId);
-      allow update: if isHR() || isOwner(candidateProfileId);
+      // HR and the Owner can read and write candidate profiles
+      allow get, list: if isSignedIn() && (isHR() || isOwner(candidateProfileId));
+      allow create, update: if isSignedIn() && (isHR() || isOwner(candidateProfileId));
       allow delete: if isHR();
 
       match /documents/{documentId} {
-        allow read: if isHR() || isOwner(candidateProfileId);
-        allow write: if isHR() || isOwner(candidateProfileId);
+        allow read, write: if isSignedIn() && (isHR() || isOwner(candidateProfileId));
       }
 
       match /verification_workflows/{workflowId} {
-        allow read: if isHR() || isOwner(candidateProfileId);
-        allow write: if isHR() || isOwner(candidateProfileId);
+        allow read, write: if isSignedIn() && (isHR() || isOwner(candidateProfileId));
       }
     }
 

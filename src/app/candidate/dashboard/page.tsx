@@ -10,12 +10,12 @@ import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { ShieldCheck, History, User, CheckCircle2, Circle, Clock, FileText, Search, ShieldAlert, BadgeCheck } from 'lucide-react';
+import { ShieldCheck, History, User, CheckCircle2, Circle, Clock, FileText, Search, ShieldAlert, BadgeCheck, Info } from 'lucide-react';
 import { CandidateVerificationOutput } from '@/ai/flows/generate-candidate-verification-scores';
 import { cn } from '@/lib/utils';
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, serverTimestamp } from 'firebase/firestore';
-import { setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 export default function CandidateDashboard() {
   const { user: authUser } = useUser();
@@ -49,7 +49,11 @@ export default function CandidateDashboard() {
   }, [db, authUser]);
   const { data: profile } = useDoc(candidateProfileRef);
 
+  const isHrUser = user?.role === 'hr';
+
   const startVerification = async () => {
+    if (isHrUser) return; // Prevent HR users from verifying themselves here
+
     setWorkflowState(s => ({ ...s, extraction: 'processing' }));
     
     setTimeout(() => {
@@ -72,12 +76,16 @@ export default function CandidateDashboard() {
 
              if (db && authUser) {
                const profileRef = doc(db, 'candidate_profiles', authUser.uid);
-               updateDocumentNonBlocking(profileRef, {
+               // Use set with merge instead of update to handle missing documents
+               setDocumentNonBlocking(profileRef, {
+                 id: authUser.uid,
+                 fullName: authUser.displayName || user?.name || "Candidate",
+                 email: authUser.email || user?.email || "",
                  trustScore: mockResults.trustScore,
                  fraudRiskScore: mockResults.fraudRiskScore,
                  profileStatus: 'verified',
                  updatedAt: new Date().toISOString(),
-               });
+               }, { merge: true });
 
                const workflowRef = doc(db, 'candidate_profiles', authUser.uid, 'verification_workflows', 'main');
                setDocumentNonBlocking(workflowRef, {
@@ -97,6 +105,32 @@ export default function CandidateDashboard() {
       }, 1500);
     }, 1500);
   };
+
+  if (isHrUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <Navbar />
+        <main className="flex-1 container mx-auto px-4 py-16 text-center">
+          <Card className="max-w-md mx-auto">
+            <CardHeader>
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Info className="w-6 h-6 text-amber-600" />
+              </div>
+              <CardTitle>Recruiter View</CardTitle>
+              <CardDescription>
+                You are currently logged in as HR. To test the candidate verification workflow, please register a separate candidate account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => window.location.href = '/hr/dashboard'}>
+                Go to HR Dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -205,11 +239,11 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
                 
-                {results && (
+                {(results || (profile && profile.trustScore > 0)) && (
                   <div className="mt-6 w-full space-y-3 bg-white/10 p-4 rounded-xl backdrop-blur-sm">
                     <p className="text-[10px] font-bold uppercase text-white/60">Score Analysis</p>
-                    <Factor label="Document Consistency" positive={!results.mismatchesDetected} />
-                    <Factor label="Career Continuity" positive={!results.employmentGapsDetected} />
+                    <Factor label="Document Consistency" positive={!(results?.mismatchesDetected || profile?.fraudRiskScore > 20)} />
+                    <Factor label="Career Continuity" positive={!(results?.employmentGapsDetected || profile?.fraudRiskScore > 40)} />
                     <Factor label="Verified Experience" positive={true} />
                   </div>
                 )}
@@ -233,8 +267,8 @@ export default function CandidateDashboard() {
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Verification Audit</h4>
                   <div className="space-y-3">
                     <LogItem label="Identity Check" status="Completed" />
-                    <LogItem label="Resume Parsing" status={workflowState.extraction === 'completed' ? "Completed" : "Pending"} />
-                    <LogItem label="Data Matching" status={workflowState.comparison === 'completed' ? "Completed" : "Pending"} />
+                    <LogItem label="Resume Parsing" status={workflowState.extraction === 'completed' || profile?.profileStatus === 'verified' ? "Completed" : "Pending"} />
+                    <LogItem label="Data Matching" status={workflowState.comparison === 'completed' || profile?.profileStatus === 'verified' ? "Completed" : "Pending"} />
                   </div>
                 </div>
               </CardContent>
