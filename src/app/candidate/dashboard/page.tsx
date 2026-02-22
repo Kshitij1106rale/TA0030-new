@@ -24,6 +24,8 @@ export default function CandidateDashboard() {
 
   const [resumeData, setResumeData] = useState("");
   const [expLetterData, setExpLetterData] = useState("");
+  const [idProofData, setIdProofData] = useState("");
+  
   const [workflowState, setWorkflowState] = useState({
     extraction: 'idle' as AgentStep,
     comparison: 'idle' as AgentStep,
@@ -118,12 +120,12 @@ export default function CandidateDashboard() {
               <CardContent className="space-y-4">
                 <DocumentUpload label="Resume (PDF)" onUpload={setResumeData} isUploaded={!!resumeData} />
                 <DocumentUpload label="Experience Letter" onUpload={setExpLetterData} isUploaded={!!expLetterData} />
-                <DocumentUpload label="ID Proof (Aadhar/Passport)" onUpload={() => {}} isUploaded={false} />
+                <DocumentUpload label="ID Proof (Aadhar/Passport)" onUpload={setIdProofData} isUploaded={!!idProofData} />
                 
                 <div className="pt-4">
                   <Button 
                     className="w-full bg-primary h-12 text-lg font-bold rounded-lg shadow-lg hover:shadow-primary/20 transition-all" 
-                    disabled={!resumeData || !expLetterData || workflowState.scoring !== 'idle'}
+                    disabled={!resumeData || !expLetterData || !idProofData || workflowState.scoring !== 'idle'}
                     onClick={startVerification}
                   >
                     Start Verification Workflow
