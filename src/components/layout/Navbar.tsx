@@ -6,10 +6,33 @@ import { useAuth } from '@/app/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Shield, LayoutDashboard, LogOut, Menu } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth as useFirebaseAuth } from '@/firebase';
+import { signOut } from 'firebase/auth';
 
 export function Navbar() {
   const { user, logout } = useAuth();
+  const firebaseAuth = useFirebaseAuth();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      // Clear Firebase session
+      await signOut(firebaseAuth);
+      // Clear local Zustand-like store
+      logout();
+      // Redirect to login page
+      router.push('/auth/login');
+      setIsMobileMenuOpen(false);
+    } catch (error) {
+      console.error("Logout failed", error);
+      // Fallback: clear local state and redirect anyway
+      logout();
+      router.push('/auth/login');
+      setIsMobileMenuOpen(false);
+    }
+  };
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
@@ -31,7 +54,7 @@ export function Navbar() {
                   Dashboard
                 </Button>
               </Link>
-              <Button variant="outline" size="sm" onClick={logout} className="gap-2">
+              <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
                 <LogOut className="w-4 h-4" />
                 Logout
               </Button>
@@ -59,18 +82,30 @@ export function Navbar() {
       {/* Mobile Navigation */}
       {isMobileMenuOpen && (
         <div className="md:hidden border-t bg-background p-4 flex flex-col gap-4">
-          <Link href="/#features" className="text-sm font-medium">Features</Link>
-          <Link href="/#how-it-works" className="text-sm font-medium">How it Works</Link>
+          <Link href="/#features" className="text-sm font-medium" onClick={() => setIsMobileMenuOpen(false)}>Features</Link>
+          <Link href="/#how-it-works" className="text-sm font-medium" onClick={() => setIsMobileMenuOpen(false)}>How it Works</Link>
           <hr />
           {user ? (
             <>
-              <Link href={user.role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard'} className="text-sm font-medium">Dashboard</Link>
-              <button onClick={logout} className="text-sm font-medium text-left">Logout</button>
+              <Link 
+                href={user.role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard'} 
+                className="text-sm font-medium"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <button 
+                onClick={handleLogout} 
+                className="text-sm font-medium text-left flex items-center gap-2 text-slate-600 hover:text-red-600"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
             </>
           ) : (
             <>
-              <Link href="/auth/login" className="text-sm font-medium">Login</Link>
-              <Link href="/auth/register" className="text-sm font-medium">Register</Link>
+              <Link href="/auth/login" className="text-sm font-medium" onClick={() => setIsMobileMenuOpen(false)}>Login</Link>
+              <Link href="/auth/register" className="text-sm font-medium" onClick={() => setIsMobileMenuOpen(false)}>Register</Link>
             </>
           )}
         </div>
