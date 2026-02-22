@@ -33,9 +33,9 @@
     },
     {
       "id": "how-it-works",
-      "description": "Minimalist modern staircase representing progress and sequential process",
-      "imageUrl": "https://picsum.photos/seed/steps/600/800",
-      "imageHint": "modern architecture"
+      "description": "Professional job interview and recruitment process",
+      "imageUrl": "https://picsum.photos/seed/recruit/600/800",
+      "imageHint": "job hiring"
     }
   ]
 }

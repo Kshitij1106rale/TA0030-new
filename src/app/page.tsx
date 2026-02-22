@@ -130,12 +130,12 @@ export default function Home() {
             <div className="relative">
               <div className="bg-primary rounded-3xl p-1 shadow-2xl overflow-hidden">
                  <Image 
-                    src={howItWorksImage?.imageUrl || "https://picsum.photos/seed/steps/600/800"} 
+                    src={howItWorksImage?.imageUrl || "https://picsum.photos/seed/recruit/600/800"} 
                     alt="Workflow Illustration" 
                     width={600} 
                     height={800}
                     className="rounded-3xl hover:scale-105 transition-transform duration-500"
-                    data-ai-hint={howItWorksImage?.imageHint || "modern architecture"}
+                    data-ai-hint={howItWorksImage?.imageHint || "job hiring"}
                   />
               </div>
             </div>
