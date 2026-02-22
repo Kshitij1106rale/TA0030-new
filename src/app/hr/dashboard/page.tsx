@@ -71,6 +71,93 @@ export default function HRDashboard() {
   }, [db, hrProfile]);
   const { data: auditLogs, isLoading: isLogsLoading } = useCollection(auditLogsQuery);
 
+  // Logic: Seed Initial Data if empty
+  useEffect(() => {
+    if (!isCandidatesLoading && candidates && candidates.length === 0 && db && hrProfile) {
+      const mockCandidates = [
+        {
+          id: 'seed-001',
+          fullName: 'Arjun Sharma',
+          email: 'arjun.sharma@example.com',
+          role: 'Senior Software Engineer',
+          profileStatus: 'verified',
+          trustScore: 94,
+          fraudRiskScore: 4,
+          createdAt: new Date(Date.now() - 604800000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: true
+        },
+        {
+          id: 'seed-002',
+          fullName: 'Priya Patel',
+          email: 'priya.patel@example.com',
+          role: 'Product Manager',
+          profileStatus: 'verified',
+          trustScore: 68,
+          fraudRiskScore: 32,
+          createdAt: new Date(Date.now() - 518400000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: false
+        },
+        {
+          id: 'seed-003',
+          fullName: 'Rahul Varma',
+          email: 'rahul.varma@example.com',
+          role: 'Backend Developer',
+          profileStatus: 'verified',
+          trustScore: 35,
+          fraudRiskScore: 78,
+          createdAt: new Date(Date.now() - 432000000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: false
+        },
+        {
+          id: 'seed-004',
+          fullName: 'Ananya Iyer',
+          email: 'ananya.iyer@example.com',
+          role: 'UX Designer',
+          profileStatus: 'verified',
+          trustScore: 89,
+          fraudRiskScore: 12,
+          createdAt: new Date(Date.now() - 345600000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: true
+        },
+        {
+          id: 'seed-005',
+          fullName: 'Vikram Singh',
+          email: 'vikram.singh@example.com',
+          role: 'Data Scientist',
+          profileStatus: 'verified',
+          trustScore: 55,
+          fraudRiskScore: 45,
+          createdAt: new Date(Date.now() - 259200000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: false
+        }
+      ];
+
+      mockCandidates.forEach(candidate => {
+        const ref = doc(db, 'candidate_profiles', candidate.id);
+        setDocumentNonBlocking(ref, candidate, { merge: true });
+        
+        // Add a workflow for each
+        const workflowRef = doc(db, 'candidate_profiles', candidate.id, 'verification_workflows', 'main');
+        setDocumentNonBlocking(workflowRef, {
+          id: 'main',
+          candidateProfileId: candidate.id,
+          overallStatus: 'completed',
+          agentDocumentExtractionStatus: 'completed',
+          agentDataComparisonStatus: 'completed',
+          agentFraudDetectionStatus: 'completed',
+          agentTrustScoreGenerationStatus: 'completed',
+          lastUpdatedAt: serverTimestamp(),
+          systemNotes: [`Automated verification completed for ${candidate.fullName}.`]
+        }, { merge: true });
+      });
+    }
+  }, [candidates, isCandidatesLoading, db, hrProfile]);
+
   // Logic: Seed Initial Logs if empty
   useEffect(() => {
     if (!isLogsLoading && auditLogs && auditLogs.length === 0 && db && firebaseUser && hrProfile) {
@@ -90,14 +177,6 @@ export default function HRDashboard() {
           action: 'RULE_SET',
           timestamp: new Date(Date.now() - 86400000).toISOString(),
           notes: 'Standard vetting threshold applied: Trust Score > 80, Risk < 20.'
-        },
-        {
-          hrProfileId: firebaseUser.uid,
-          candidateId: 'demo-001',
-          candidateName: 'Alex Rivera',
-          action: 'AUTO_SHORTLIST',
-          timestamp: new Date(Date.now() - 43200000).toISOString(),
-          notes: 'Candidate automatically qualified for technical interview via AI assessment.'
         }
       ];
 
@@ -331,6 +410,36 @@ export default function HRDashboard() {
                     </ResponsiveContainer>
                   </CardContent>
                 </Card>
+                
+                <Card className="border-none shadow-sm bg-white">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Risk Insights</CardTitle>
+                    <CardDescription>Breakdown by category</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#4B0082]" />
+                        <span>Low Risk</span>
+                      </div>
+                      <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)<=20).length||0}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#8F00FF]" />
+                        <span>Medium Risk</span>
+                      </div>
+                      <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)>20 && (c.fraudRiskScore||0)<=60).length||0}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#FF8042]" />
+                        <span>High Risk</span>
+                      </div>
+                      <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)>60).length||0}</span>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </TabsContent>
@@ -407,7 +516,7 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
       notes: `Manual ${status} action by HR administrator.`
     });
 
-    toast({ title: `Profile ${status}`, description: `${candidate.fullName} has been updated.` });
+    toast({ title: `Profile ${status.charAt(0).toUpperCase() + status.slice(1)}ed`, description: `${candidate.fullName} has been updated.` });
   };
 
   return (
