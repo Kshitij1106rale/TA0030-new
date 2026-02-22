@@ -10,8 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Mail, Lock, Shield } from 'lucide-react';
+import { User as UserIcon, Mail, Lock, Shield } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 export default function RegisterPage() {
   const [role, setRole] = useState<UserRole>('candidate');
@@ -20,18 +24,60 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const firebaseAuth = useFirebaseAuth();
+  const db = useFirestore();
+  const { toast } = useToast();
   const router = useRouter();
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate Registration
-    setTimeout(() => {
-      login(name, email, role);
-      setIsLoading(false);
-      router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
-    }, 1500);
+    createUserWithEmailAndPassword(firebaseAuth, email, password)
+      .then(async (userCredential) => {
+        const user = userCredential.user;
+        await updateProfile(user, { displayName: name });
+        
+        const profileData = {
+          id: user.uid,
+          email,
+          fullName: name,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (role === 'hr') {
+          setDoc(doc(db, 'hr_profiles', user.uid), {
+            ...profileData,
+            companyName: "Default Corp",
+            department: "Human Resources",
+          });
+        } else {
+          setDoc(doc(db, 'candidate_profiles', user.uid), {
+            ...profileData,
+            profileStatus: 'pending_documents',
+            trustScore: 0,
+            fraudRiskScore: 0,
+          });
+        }
+
+        login(name, email, role);
+        toast({
+          title: "Account Created",
+          description: `Welcome to VeriHire AI, ${name}!`,
+        });
+        router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
+      })
+      .catch((error) => {
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: error.message,
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   return (
@@ -61,7 +107,7 @@ export default function RegisterPage() {
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <UserIcon className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input 
                     id="name" 
                     placeholder="Jane Doe" 

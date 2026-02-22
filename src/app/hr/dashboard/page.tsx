@@ -31,7 +31,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -46,11 +46,13 @@ export default function HRDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const db = useFirestore();
+  const { user: firebaseUser } = useUser();
 
   const candidatesQuery = useMemoFirebase(() => {
-    if (!db) return null;
+    // Only query if Firestore and the authenticated user are available to satisfy security rules
+    if (!db || !firebaseUser) return null;
     return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
-  }, [db]);
+  }, [db, firebaseUser]);
 
   const { data: candidates, isLoading } = useCollection(candidatesQuery);
 
@@ -60,13 +62,15 @@ export default function HRDashboard() {
     setIsSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'candidate_profiles'), {
-        ...newCandidate,
+      addDoc(collection(db, 'candidate_profiles'), {
+        fullName: newCandidate.fullName,
+        email: newCandidate.email,
+        role: newCandidate.role,
         profileStatus: 'pending_documents',
         trustScore: 0,
         fraudRiskScore: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
       
       toast({
@@ -91,7 +95,6 @@ export default function HRDashboard() {
       title: "Generating Report",
       description: "Your comprehensive intelligence report is being prepared for download.",
     });
-    // Simulate download delay
     setTimeout(() => {
       toast({
         title: "Report Exported",
@@ -100,7 +103,6 @@ export default function HRDashboard() {
     }, 2000);
   };
 
-  // Derived stats
   const totalCandidates = candidates?.length || 0;
   const highRiskCount = candidates?.filter(c => (c.fraudRiskScore || 0) > 60).length || 0;
   const verifiedCount = candidates?.filter(c => c.profileStatus === 'verified').length || 0;
@@ -185,7 +187,6 @@ export default function HRDashboard() {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard title="Total Candidates" value={totalCandidates.toString()} icon={<Users className="w-5 h-5 text-blue-500" />} trend="+12% from last month" />
           <StatCard title="High Risk Flags" value={highRiskCount.toString()} icon={<AlertTriangle className="w-5 h-5 text-red-500" />} trend="-4% this week" />
@@ -194,7 +195,6 @@ export default function HRDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Candidate List */}
           <div className="lg:col-span-2 space-y-6">
             <Card className="border-none shadow-sm">
               <CardHeader className="pb-0">
@@ -207,11 +207,6 @@ export default function HRDashboard() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="icon"><Filter className="w-4 h-4" /></Button>
-                    <Button variant="outline" size="icon" className="bg-slate-50"><List className="w-4 h-4" /></Button>
-                    <Button variant="outline" size="icon"><LayoutGrid className="w-4 h-4" /></Button>
                   </div>
                 </div>
               </CardHeader>
@@ -242,7 +237,6 @@ export default function HRDashboard() {
             </Card>
           </div>
 
-          {/* Right: Charts */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -267,30 +261,6 @@ export default function HRDashboard() {
                     </Pie>
                     <Tooltip />
                   </PieChart>
-                </ResponsiveContainer>
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  {riskDistribution.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-[10px] font-bold uppercase">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                      <span className="text-slate-500 truncate">{item.name} ({item.value})</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Trust Score Performance</CardTitle>
-              </CardHeader>
-              <CardContent className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={riskDistribution}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" hide />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#4B0082" radius={[4, 4, 0, 0]} />
-                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>

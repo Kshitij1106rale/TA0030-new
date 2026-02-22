@@ -12,6 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Lock, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth as useFirebaseAuth } from '@/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [role, setRole] = useState<UserRole>('candidate');
@@ -19,19 +22,34 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const firebaseAuth = useFirebaseAuth();
+  const { toast } = useToast();
   const router = useRouter();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate API delay
-    setTimeout(() => {
-      const name = role === 'hr' ? 'HR Manager' : 'John Doe';
-      login(name, email, role);
-      setIsLoading(false);
-      router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
-    }, 1500);
+    signInWithEmailAndPassword(firebaseAuth, email, password)
+      .then((userCredential) => {
+        const name = userCredential.user.displayName || 'User';
+        login(name, email, role);
+        toast({
+          title: "Welcome Back",
+          description: "Successfully signed in to VeriHire AI.",
+        });
+        router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
+      })
+      .catch((error) => {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: error.message,
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   return (
