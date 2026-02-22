@@ -17,14 +17,22 @@ export function DocumentUpload({ label, onUpload, isUploaded }: DocumentUploadPr
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setIsProcessing(true);
-      // Generate a unique ID to ensure state update triggers if re-uploading
-      const mockId = Math.random().toString(36).substring(7);
+      const file = e.target.files[0];
+      const reader = new FileReader();
       
-      // Simulate reading file and OCR processing
-      setTimeout(() => {
+      reader.onloadend = () => {
         setIsProcessing(false);
-        onUpload(`data:application/pdf;base64,mock_data_${mockId}_for_${label}`);
-      }, 1500);
+        // This will provide a real data URI (e.g., data:image/jpeg;base64,...) 
+        // that Genkit can actually process.
+        onUpload(reader.result as string);
+      };
+      
+      reader.onerror = () => {
+        setIsProcessing(false);
+        console.error("Failed to read file");
+      };
+      
+      reader.readAsDataURL(file);
     }
   };
 
