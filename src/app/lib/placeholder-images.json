@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-bg",
+      "description": "Abstract futuristic technology network background",
+      "imageUrl": "https://picsum.photos/seed/tech1/1200/800",
+      "imageHint": "technology network"
+    },
+    {
+      "id": "feature-verification",
+      "description": "Digital document security icon",
+      "imageUrl": "https://picsum.photos/seed/verify/400/300",
+      "imageHint": "security document"
+    },
+    {
+      "id": "feature-ai",
+      "description": "AI neural network visualization",
+      "imageUrl": "https://picsum.photos/seed/ai/400/300",
+      "imageHint": "artificial intelligence"
+    },
+    {
+      "id": "candidate-1",
+      "description": "Professional male portrait",
+      "imageUrl": "https://picsum.photos/seed/p1/200/200",
+      "imageHint": "professional man"
+    },
+    {
+      "id": "candidate-2",
+      "description": "Professional female portrait",
+      "imageUrl": "https://picsum.photos/seed/p2/200/200",
+      "imageHint": "professional woman"
+    }
+  ]
+}
