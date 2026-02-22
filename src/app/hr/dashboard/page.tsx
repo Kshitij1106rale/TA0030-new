@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { CandidateCard } from '@/components/hr/CandidateCard';
 import { 
   Users, Search, TrendingUp, AlertTriangle, CheckCircle2, Download, Plus, ShieldAlert, Loader2, UserPlus, 
-  ShieldCheck, Mail, Briefcase, History, Info, Filter, Settings, ListChecks, ArrowDownAZ, ArrowUpZA, Scale
+  ShieldCheck, Mail, Briefcase, History, Info, Filter, Settings, ListChecks, ArrowDownAZ, ArrowUpZA, Scale, Clock
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
@@ -232,6 +232,26 @@ export default function HRDashboard() {
     });
   }, [candidates, minTrustScore, maxRiskScore, db, hrProfile, firebaseUser]);
 
+  const handleSaveRules = () => {
+    if (!db || !firebaseUser) return;
+    setIsRuleDialogOpen(false);
+    
+    // Explicitly log the rule change
+    addDocumentNonBlocking(collection(db, 'audit_logs'), {
+      hrProfileId: firebaseUser.uid,
+      candidateId: 'sys-rule',
+      candidateName: 'Global Policy',
+      action: 'RULE_SET',
+      timestamp: new Date().toISOString(),
+      notes: `Standard vetting threshold manually updated: Trust Score > ${minTrustScore}, Risk < ${maxRiskScore}.`
+    });
+    
+    toast({
+      title: "Rules Updated",
+      description: `Threshold set to Trust > ${minTrustScore} and Risk < ${maxRiskScore}%`,
+    });
+  };
+
   const handleAddCandidate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !firebaseUser || !hrProfile) return;
@@ -239,6 +259,8 @@ export default function HRDashboard() {
     try {
       const candidatesCol = collection(db, 'candidate_profiles');
       const candidateRef = doc(candidatesCol);
+      const timestamp = new Date().toISOString();
+      
       setDocumentNonBlocking(candidateRef, {
         id: candidateRef.id,
         fullName: newCandidate.fullName,
@@ -247,9 +269,20 @@ export default function HRDashboard() {
         profileStatus: 'pending_documents',
         trustScore: 0,
         fraudRiskScore: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: timestamp,
+        updatedAt: timestamp,
       }, { merge: true });
+
+      // Log the invitation
+      addDocumentNonBlocking(collection(db, 'audit_logs'), {
+        hrProfileId: firebaseUser.uid,
+        candidateId: candidateRef.id,
+        candidateName: newCandidate.fullName,
+        action: 'INVITATION_SENT',
+        timestamp: timestamp,
+        notes: `Manual candidate invitation sent for position: ${newCandidate.role}`
+      });
+
       toast({ title: "Candidate Invited", description: `${newCandidate.fullName} has been added.` });
       setIsAddDialogOpen(false);
       setNewCandidate({ fullName: "", email: "", role: "" });
@@ -308,13 +341,13 @@ export default function HRDashboard() {
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="font-headline text-3xl font-bold">HR Intelligence</h1>
+            <h1 className="font-headline text-3xl font-bold text-primary">HR Intelligence Dashboard</h1>
             <p className="text-slate-500">Welcome back, {hrProfile?.fullName || 'Recruiter'}</p>
           </div>
           <div className="flex items-center gap-3">
             <Dialog open={isRuleDialogOpen} onOpenChange={setIsRuleDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" className="gap-2 border-primary/20 hover:bg-primary/5">
                   <Settings className="w-4 h-4" /> Rules
                 </Button>
               </DialogTrigger>
@@ -325,42 +358,49 @@ export default function HRDashboard() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label>Minimum Trust Score: {minTrustScore}</Label>
+                    <Label className="flex justify-between">
+                      Minimum Trust Score <span>{minTrustScore}%</span>
+                    </Label>
                     <Input type="range" min="0" max="100" value={minTrustScore} onChange={(e) => setMinTrustScore(parseInt(e.target.value))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Maximum Risk Score: {maxRiskScore}</Label>
+                    <Label className="flex justify-between">
+                      Maximum Fraud Risk <span>{maxRiskScore}%</span>
+                    </Label>
                     <Input type="range" min="0" max="100" value={maxRiskScore} onChange={(e) => setMaxRiskScore(parseInt(e.target.value))} />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={() => setIsRuleDialogOpen(false)}>Save Rules</Button>
+                  <Button variant="ghost" onClick={() => setIsRuleDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleSaveRules}>Save & Apply Rules</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90 gap-2">
+                <Button className="bg-primary hover:bg-primary/90 gap-2 shadow-md">
                   <Plus className="w-4 h-4" /> Add Candidate
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Invite Candidate</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Invite New Candidate</DialogTitle></DialogHeader>
                 <form onSubmit={handleAddCandidate} className="space-y-4 pt-4">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
-                    <Input required value={newCandidate.fullName} onChange={(e) => setNewCandidate({...newCandidate, fullName: e.target.value})} />
+                    <Input required value={newCandidate.fullName} onChange={(e) => setNewCandidate({...newCandidate, fullName: e.target.value})} placeholder="Jane Doe" />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input type="email" required value={newCandidate.email} onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})} />
+                    <Input type="email" required value={newCandidate.email} onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})} placeholder="jane@example.com" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Position</Label>
-                    <Input required value={newCandidate.role} onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})} placeholder="e.g. Software Engineer" />
+                    <Label>Position / Role</Label>
+                    <Input required value={newCandidate.role} onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})} placeholder="e.g. Senior Backend Engineer" />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>Send Invitation</Button>
+                  <Button type="submit" className="w-full h-11" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Send Invitation"}
+                  </Button>
                 </form>
               </DialogContent>
             </Dialog>
@@ -377,17 +417,17 @@ export default function HRDashboard() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <Input placeholder="Search candidates..." className="pl-10 bg-white" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <Input placeholder="Search by name or email..." className="pl-10 bg-white shadow-sm border-slate-200" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')}>
+                <Button variant="outline" size="icon" onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')} title="Sort by Trust Score">
                   {sortOrder === 'desc' ? <ArrowDownAZ className="w-4 h-4" /> : <ArrowUpZA className="w-4 h-4" />}
                 </Button>
-                <select className="h-10 px-3 bg-white border rounded-md text-sm outline-none" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
-                  <option value="all">All Risks</option>
-                  <option value="low">Low Risk</option>
-                  <option value="medium">Medium Risk</option>
-                  <option value="high">High Risk</option>
+                <select className="h-10 px-3 bg-white border border-slate-200 rounded-md text-sm outline-none shadow-sm" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
+                  <option value="all">All Risk Levels</option>
+                  <option value="low">Low Risk Only</option>
+                  <option value="medium">Medium Risk Only</option>
+                  <option value="high">High Risk Only</option>
                 </select>
               </div>
             </div>
@@ -395,11 +435,11 @@ export default function HRDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-3">
                 {isCandidatesLoading ? (
-                  <div className="flex justify-center py-20"><Loader2 className="animate-spin" /></div>
+                  <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>
                 ) : processedCandidates.length > 0 ? (
                   processedCandidates.map((c, i) => (
                     <div key={c.id} className="relative">
-                      {i < 10 && <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-full" />}
+                      {i < 3 && <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-primary rounded-full shadow-lg" />}
                       <CandidateCard 
                         {...c}
                         name={c.fullName}
@@ -415,7 +455,7 @@ export default function HRDashboard() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-20 bg-white border rounded-xl">No candidates found</div>
+                  <div className="text-center py-20 bg-white border rounded-xl border-dashed">No candidates match your criteria</div>
                 )}
               </div>
 
@@ -425,8 +465,8 @@ export default function HRDashboard() {
                   <CardContent className="h-[240px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={[{name: 'Low', value: candidates?.filter(c => (c.fraudRiskScore||0)<=20).length||0}, {name: 'Med', value: candidates?.filter(c => (c.fraudRiskScore||0)>20 && (c.fraudRiskScore||0)<=60).length||0}, {name: 'High', value: candidates?.filter(c => (c.fraudRiskScore||0)>60).length||0}]} innerRadius={60} outerRadius={80} dataKey="value">
-                          {COLORS.map((c, i) => <Cell key={i} fill={c} />)}
+                        <Pie data={[{name: 'Low', value: candidates?.filter(c => (c.fraudRiskScore||0)<=20).length||0}, {name: 'Med', value: candidates?.filter(c => (c.fraudRiskScore||0)>20 && (c.fraudRiskScore||0)<=60).length||0}, {name: 'High', value: candidates?.filter(c => (c.fraudRiskScore||0)>60).length||0}]} innerRadius={60} outerRadius={80} dataKey="value" paddingAngle={5}>
+                          {COLORS.map((c, i) => <Cell key={i} fill={c} stroke="none" />)}
                         </Pie>
                         <Tooltip />
                         <Legend />
@@ -437,28 +477,28 @@ export default function HRDashboard() {
                 
                 <Card className="border-none shadow-sm bg-white">
                   <CardHeader>
-                    <CardTitle className="text-lg">Risk Insights</CardTitle>
+                    <CardTitle className="text-lg">Real-time Insights</CardTitle>
                     <CardDescription>Breakdown by category</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex justify-between items-center text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-[#4B0082]" />
-                        <span>Low Risk</span>
+                        <span className="text-slate-600">Low Risk Candidates</span>
                       </div>
                       <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)<=20).length||0}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-[#8F00FF]" />
-                        <span>Medium Risk</span>
+                        <span className="text-slate-600">Medium Risk Candidates</span>
                       </div>
                       <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)>20 && (c.fraudRiskScore||0)<=60).length||0}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-[#FF8042]" />
-                        <span>High Risk</span>
+                        <span className="text-slate-600">High Risk Candidates</span>
                       </div>
                       <span className="font-bold">{candidates?.filter(c => (c.fraudRiskScore||0)>60).length||0}</span>
                     </div>
@@ -477,26 +517,35 @@ export default function HRDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {auditLogs?.map((log) => (
-                    <div key={log.id} className="flex items-start gap-4 p-3 border rounded-lg hover:bg-slate-50 transition-colors">
-                      <div className={cn("p-2 rounded-full", log.action === 'AUTO_SHORTLIST' ? "bg-green-100 text-green-600" : "bg-blue-100 text-blue-600")}>
-                        <History className="w-4 h-4" />
+                    <div key={log.id} className="flex items-start gap-4 p-4 border rounded-xl hover:bg-slate-50 transition-all group">
+                      <div className={cn("p-2.5 rounded-full shadow-sm transition-transform group-hover:scale-110", log.action === 'AUTO_SHORTLIST' ? "bg-green-100 text-green-600" : log.action === 'REJECTED' ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600")}>
+                        {log.action === 'RULE_SET' ? <Settings className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </div>
                       <div className="flex-1">
-                        <div className="flex justify-between">
-                          <p className="text-sm font-bold">{log.action}</p>
-                          <span className="text-[10px] text-slate-400 font-medium">{new Date(log.timestamp).toLocaleString()}</span>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{log.action}</p>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">
+                              Candidate / Policy: <span className="font-bold text-primary">{log.candidateName}</span>
+                            </p>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">
+                            {new Date(log.timestamp).toLocaleString(undefined, {
+                              year: 'numeric', month: 'numeric', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit', second: '2-digit'
+                            })}
+                          </span>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1">
-                          Candidate: <span className="font-bold">{log.candidateName}</span>
+                        <p className="text-[11px] text-slate-600 bg-white/50 p-2 rounded-md mt-2 border border-slate-100 italic">
+                          {log.notes}
                         </p>
-                        <p className="text-[10px] text-slate-500 italic mt-1">{log.notes}</p>
                       </div>
                     </div>
                   ))}
                   {(!auditLogs || auditLogs.length === 0) && (
                     <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-3">
-                      <Loader2 className="w-6 h-6 animate-spin text-slate-200" />
-                      <p>Initializing audit history...</p>
+                      <Loader2 className="w-6 h-6 animate-spin text-primary/30" />
+                      <p className="text-sm font-medium">Synchronizing compliance history...</p>
                     </div>
                   )}
                 </div>
@@ -529,68 +578,82 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
   const handleAction = (status: string) => {
     if (!db || !hrUser) return;
     const profileRef = doc(db, 'candidate_profiles', candidate.id);
-    updateDocumentNonBlocking(profileRef, { profileStatus: status, updatedAt: new Date().toISOString() });
     
+    // Update the status
+    updateDocumentNonBlocking(profileRef, { 
+      profileStatus: status, 
+      updatedAt: new Date().toISOString(),
+      isShortlisted: status === 'verified' // Auto-shortlist on manual verification if approved
+    });
+    
+    // Create audit log entry
     addDocumentNonBlocking(collection(db, 'audit_logs'), {
       hrProfileId: hrUser.uid,
       candidateId: candidate.id,
       candidateName: candidate.fullName,
       action: status.toUpperCase(),
       timestamp: new Date().toISOString(),
-      notes: `Manual ${status} action by HR administrator.`
+      notes: `Manual administrative decision: Candidate status updated to ${status}.`
     });
 
-    toast({ title: `Profile ${status.charAt(0).toUpperCase() + status.slice(1)}ed`, description: `${candidate.fullName} has been updated.` });
+    toast({ 
+      title: `Profile ${status === 'verified' ? 'Approved' : 'Rejected'}`, 
+      description: `Action completed for ${candidate.fullName}.` 
+    });
   };
 
   return (
     <div className="space-y-6">
       <DialogHeader>
         <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16 border-2 border-primary/10">
+          <Avatar className="h-20 w-20 border-4 border-primary/10 shadow-sm">
             <AvatarImage src={`https://picsum.photos/seed/${candidate.id}/200/200`} />
-            <AvatarFallback>{candidate.fullName?.charAt(0)}</AvatarFallback>
+            <AvatarFallback className="text-2xl font-bold bg-primary/5 text-primary">{candidate.fullName?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div>
-            <DialogTitle className="text-2xl font-bold">{candidate.fullName}</DialogTitle>
-            <DialogDescription>{candidate.email} • {candidate.role}</DialogDescription>
+            <DialogTitle className="text-2xl font-black text-slate-900">{candidate.fullName}</DialogTitle>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant="outline" className="text-[10px] font-bold uppercase">{candidate.role}</Badge>
+              <span className="text-slate-400 text-xs">•</span>
+              <span className="text-slate-500 text-xs">{candidate.email}</span>
+            </div>
           </div>
         </div>
       </DialogHeader>
 
       <div className="grid grid-cols-2 gap-4">
-        <Card className="bg-slate-50 border-none shadow-none">
+        <Card className="bg-primary/5 border-none shadow-none ring-1 ring-primary/10">
           <CardContent className="p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trust Score</span>
+            <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">Trust Index</span>
             <div className="flex items-end gap-2 mt-1">
               <span className="text-3xl font-black text-primary">{candidate.trustScore || 0}%</span>
-              {candidate.isShortlisted && <Badge className="mb-2 bg-green-500 border-none h-4 text-[8px]">SHORTLISTED</Badge>}
+              {candidate.isShortlisted && <Badge className="mb-2 bg-green-500 border-none h-4 text-[8px] font-black">ELITE</Badge>}
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-50 border-none shadow-none">
+        <Card className="bg-red-50 border-none shadow-none ring-1 ring-red-100">
           <CardContent className="p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fraud Risk</span>
+            <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Fraud Risk</span>
             <div className="flex items-end gap-2 mt-1">
-              <span className="text-3xl font-black text-red-500">{candidate.fraudRiskScore || 0}%</span>
+              <span className="text-3xl font-black text-red-600">{candidate.fraudRiskScore || 0}%</span>
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex justify-between text-xs">
-          <span className="text-slate-500">Status</span>
-          <Badge variant={candidate.profileStatus === 'verified' ? 'default' : 'secondary'}>{candidate.profileStatus}</Badge>
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-slate-500">Registered</span>
-          <span className="font-medium">{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString() : 'N/A'}</span>
-        </div>
       </div>
 
       <div className="space-y-4">
-        <h4 className="text-sm font-bold flex items-center gap-2"><History className="w-4 h-4" /> Verification Status</h4>
+        <h4 className="text-sm font-bold flex items-center gap-2 text-slate-800"><Scale className="w-4 h-4 text-primary" /> Analysis Insights</h4>
+        <Alert className="bg-primary/5 border-primary/20 rounded-xl">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <AlertTitle className="text-primary font-bold text-xs uppercase tracking-wider">AI Intelligence Summary</AlertTitle>
+          <AlertDescription className="text-xs leading-relaxed text-slate-700 mt-2 font-medium italic">
+            "{workflow?.systemNotes?.[0] || "No intelligence report available for this profile yet."}"
+          </AlertDescription>
+        </Alert>
+      </div>
+
+      <div className="space-y-4">
+        <h4 className="text-sm font-bold flex items-center gap-2 text-slate-800"><History className="w-4 h-4 text-primary" /> Verification Pipeline</h4>
         <WorkflowStatus steps={{
           extraction: (workflow?.agentDocumentExtractionStatus as AgentStep) || 'idle',
           comparison: (workflow?.agentDataComparisonStatus as AgentStep) || 'idle',
@@ -599,16 +662,16 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
         }} />
       </div>
 
-      <Alert className="bg-primary/5 border-primary/20">
-        <ShieldCheck className="h-4 w-4 text-primary" />
-        <AlertTitle className="text-primary font-bold">Analysis Summary</AlertTitle>
-        <AlertDescription className="text-xs italic">{workflow?.systemNotes?.[0] || "No notes yet."}</AlertDescription>
-      </Alert>
-
-      <DialogFooter className="gap-2">
-        <Button variant="outline" className="flex-1" onClick={() => window.location.href=`mailto:${candidate.email}`}>Contact</Button>
-        <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={() => handleAction('rejected')}>Reject</Button>
-        <Button className="flex-1" onClick={() => handleAction('verified')}>Approve</Button>
+      <DialogFooter className="gap-3 pt-4 border-t">
+        <Button variant="outline" className="flex-1 font-bold h-11" onClick={() => window.location.href=`mailto:${candidate.email}`}>
+          <Mail className="w-4 h-4 mr-2" /> Contact
+        </Button>
+        <Button className="flex-1 bg-red-600 hover:bg-red-700 font-bold h-11 shadow-lg shadow-red-200" onClick={() => handleAction('rejected')}>
+          Reject Profile
+        </Button>
+        <Button className="flex-1 bg-primary hover:bg-primary/90 font-bold h-11 shadow-lg shadow-primary/20" onClick={() => handleAction('verified')}>
+          <CheckCircle2 className="w-4 h-4 mr-2" /> Approve
+        </Button>
       </DialogFooter>
     </div>
   );
