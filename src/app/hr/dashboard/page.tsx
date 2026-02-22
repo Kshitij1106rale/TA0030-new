@@ -78,7 +78,7 @@ export default function HRDashboard() {
         {
           id: 'seed-001',
           fullName: 'Arjun Sharma',
-          email: 'arjun.sharma@example.com',
+          email: 'arjun.sharma@example.in',
           role: 'Senior Software Engineer',
           profileStatus: 'verified',
           trustScore: 94,
@@ -90,7 +90,7 @@ export default function HRDashboard() {
         {
           id: 'seed-002',
           fullName: 'Priya Patel',
-          email: 'priya.patel@example.com',
+          email: 'priya.patel@example.in',
           role: 'Product Manager',
           profileStatus: 'verified',
           trustScore: 68,
@@ -102,7 +102,7 @@ export default function HRDashboard() {
         {
           id: 'seed-003',
           fullName: 'Rahul Varma',
-          email: 'rahul.varma@example.com',
+          email: 'rahul.varma@example.in',
           role: 'Backend Developer',
           profileStatus: 'verified',
           trustScore: 35,
@@ -114,7 +114,7 @@ export default function HRDashboard() {
         {
           id: 'seed-004',
           fullName: 'Ananya Iyer',
-          email: 'ananya.iyer@example.com',
+          email: 'ananya.iyer@example.in',
           role: 'UX Designer',
           profileStatus: 'verified',
           trustScore: 89,
@@ -126,12 +126,36 @@ export default function HRDashboard() {
         {
           id: 'seed-005',
           fullName: 'Vikram Singh',
-          email: 'vikram.singh@example.com',
+          email: 'vikram.singh@example.in',
           role: 'Data Scientist',
           profileStatus: 'verified',
           trustScore: 55,
           fraudRiskScore: 45,
           createdAt: new Date(Date.now() - 259200000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: false
+        },
+        {
+          id: 'seed-006',
+          fullName: 'Sunita Rao',
+          email: 'sunita.rao@example.in',
+          role: 'HR Specialist',
+          profileStatus: 'verified',
+          trustScore: 92,
+          fraudRiskScore: 8,
+          createdAt: new Date(Date.now() - 172800000).toISOString(),
+          updatedAt: new Date().toISOString(),
+          isShortlisted: true
+        },
+        {
+          id: 'seed-007',
+          fullName: 'Amit Gupta',
+          email: 'amit.gupta@example.in',
+          role: 'Frontend Engineer',
+          profileStatus: 'verified',
+          trustScore: 22,
+          fraudRiskScore: 88,
+          createdAt: new Date(Date.now() - 86400000).toISOString(),
           updatedAt: new Date().toISOString(),
           isShortlisted: false
         }
@@ -152,7 +176,7 @@ export default function HRDashboard() {
           agentFraudDetectionStatus: 'completed',
           agentTrustScoreGenerationStatus: 'completed',
           lastUpdatedAt: serverTimestamp(),
-          systemNotes: [`Automated verification completed for ${candidate.fullName}.`]
+          systemNotes: [`Automated verification completed for ${candidate.fullName}. Risk profile categorized as ${candidate.fraudRiskScore > 60 ? 'High' : candidate.fraudRiskScore > 20 ? 'Medium' : 'Low'}.`]
         }, { merge: true });
       });
     }
