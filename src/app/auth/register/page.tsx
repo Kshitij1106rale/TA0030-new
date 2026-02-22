@@ -14,7 +14,7 @@ import { User as UserIcon, Mail, Lock, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 export default function RegisterPage() {
@@ -29,55 +29,53 @@ export default function RegisterPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    createUserWithEmailAndPassword(firebaseAuth, email, password)
-      .then(async (userCredential) => {
-        const user = userCredential.user;
-        await updateProfile(user, { displayName: name });
-        
-        const profileData = {
-          id: user.uid,
-          email,
-          fullName: name,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+    try {
+      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      const user = userCredential.user;
+      await updateProfile(user, { displayName: name });
+      
+      const profileData = {
+        id: user.uid,
+        email,
+        fullName: name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-        if (role === 'hr') {
-          setDoc(doc(db, 'hr_profiles', user.uid), {
-            ...profileData,
-            companyName: "Default Corp",
-            department: "Human Resources",
-          });
-        } else {
-          setDoc(doc(db, 'candidate_profiles', user.uid), {
-            ...profileData,
-            profileStatus: 'pending_documents',
-            trustScore: 0,
-            fraudRiskScore: 0,
-          });
-        }
+      if (role === 'hr') {
+        await setDoc(doc(db, 'hr_profiles', user.uid), {
+          ...profileData,
+          companyName: "Default Corp",
+          department: "Human Resources",
+        });
+      } else {
+        await setDoc(doc(db, 'candidate_profiles', user.uid), {
+          ...profileData,
+          profileStatus: 'pending_documents',
+          trustScore: 0,
+          fraudRiskScore: 0,
+        });
+      }
 
-        login(name, email, role);
-        toast({
-          title: "Account Created",
-          description: `Welcome to VeriHire AI, ${name}!`,
-        });
-        router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
-      })
-      .catch((error) => {
-        toast({
-          variant: "destructive",
-          title: "Registration Failed",
-          description: error.message,
-        });
-      })
-      .finally(() => {
-        setIsLoading(false);
+      login(name, email, role);
+      toast({
+        title: "Account Created",
+        description: `Welcome to VeriHire AI, ${name}!`,
       });
+      router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Registration Failed",
+        description: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

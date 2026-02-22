@@ -10,32 +10,25 @@ import { CandidateCard } from '@/components/hr/CandidateCard';
 import { 
   Users, 
   Search, 
-  Filter, 
-  Plus, 
   TrendingUp, 
   AlertTriangle, 
   CheckCircle2, 
   Download,
-  LayoutGrid,
-  List
+  Plus
 } from 'lucide-react';
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell
 } from 'recharts';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const COLORS = ['#4B0082', '#8F00FF', '#FF8042', '#FF0000'];
 
@@ -48,46 +41,44 @@ export default function HRDashboard() {
   const db = useFirestore();
   const { user: firebaseUser } = useUser();
 
-  const candidatesQuery = useMemoFirebase(() => {
-    // Only query if Firestore and the authenticated user are available to satisfy security rules
+  // Verify HR Profile existence before querying candidates to satisfy security rules
+  const hrProfileRef = useMemoFirebase(() => {
     if (!db || !firebaseUser) return null;
-    return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
+    return doc(db, 'hr_profiles', firebaseUser.uid);
   }, [db, firebaseUser]);
+  const { data: hrProfile, isLoading: isProfileLoading } = useDoc(hrProfileRef);
 
-  const { data: candidates, isLoading } = useCollection(candidatesQuery);
+  const candidatesQuery = useMemoFirebase(() => {
+    // Only query if Firestore, authenticated user, AND their HR profile are available
+    if (!db || !firebaseUser || !hrProfile) return null;
+    return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
+  }, [db, firebaseUser, hrProfile]);
+
+  const { data: candidates, isLoading: isCandidatesLoading } = useCollection(candidatesQuery);
 
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!db) return;
     setIsSubmitting(true);
 
-    try {
-      addDoc(collection(db, 'candidate_profiles'), {
-        fullName: newCandidate.fullName,
-        email: newCandidate.email,
-        role: newCandidate.role,
-        profileStatus: 'pending_documents',
-        trustScore: 0,
-        fraudRiskScore: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      
-      toast({
-        title: "Candidate Added",
-        description: `${newCandidate.fullName} has been invited to the platform.`,
-      });
-      setIsAddDialogOpen(false);
-      setNewCandidate({ fullName: "", email: "", role: "" });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to add candidate. Please try again.",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    addDocumentNonBlocking(collection(db, 'candidate_profiles'), {
+      fullName: newCandidate.fullName,
+      email: newCandidate.email,
+      role: newCandidate.role,
+      profileStatus: 'pending_documents',
+      trustScore: 0,
+      fraudRiskScore: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    
+    toast({
+      title: "Candidate Added",
+      description: `${newCandidate.fullName} has been invited to the platform.`,
+    });
+    setIsAddDialogOpen(false);
+    setNewCandidate({ fullName: "", email: "", role: "" });
+    setIsSubmitting(false);
   };
 
   const handleExportReport = () => {
@@ -211,8 +202,8 @@ export default function HRDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="pt-6 space-y-3">
-                {isLoading ? (
-                  <div className="text-center py-12 text-slate-400">Loading candidates...</div>
+                {isProfileLoading || isCandidatesLoading ? (
+                  <div className="text-center py-12 text-slate-400">Loading intelligence data...</div>
                 ) : candidates && candidates.length > 0 ? (
                   candidates
                     .filter(c => 
@@ -259,7 +250,6 @@ export default function HRDashboard() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>

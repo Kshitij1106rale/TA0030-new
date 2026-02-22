@@ -10,12 +10,12 @@ import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { ShieldCheck, Info, AlertTriangle, User, History } from 'lucide-react';
-import { extractCandidateDocumentData } from '@/ai/flows/extract-candidate-document-data';
-import { generateCandidateVerificationScores, CandidateVerificationOutput } from '@/ai/flows/generate-candidate-verification-scores';
+import { ShieldCheck, History, User } from 'lucide-react';
+import { CandidateVerificationOutput } from '@/ai/flows/generate-candidate-verification-scores';
 import { cn } from '@/lib/utils';
 import { useFirestore, useUser } from '@/firebase';
-import { doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp } from 'firebase/firestore';
+import { setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 export default function CandidateDashboard() {
   const { user: authUser } = useUser();
@@ -60,7 +60,7 @@ export default function CandidateDashboard() {
              // Persist to Firestore if user is authenticated
              if (db && authUser) {
                const profileRef = doc(db, 'candidate_profiles', authUser.uid);
-               updateDoc(profileRef, {
+               updateDocumentNonBlocking(profileRef, {
                  trustScore: mockResults.trustScore,
                  fraudRiskScore: mockResults.fraudRiskScore,
                  profileStatus: 'verified',
@@ -69,7 +69,7 @@ export default function CandidateDashboard() {
 
                // Create verification workflow log
                const workflowRef = doc(db, 'candidate_profiles', authUser.uid, 'verification_workflows', 'main');
-               setDoc(workflowRef, {
+               setDocumentNonBlocking(workflowRef, {
                  id: 'main',
                  candidateProfileId: authUser.uid,
                  overallStatus: 'completed',
@@ -79,7 +79,7 @@ export default function CandidateDashboard() {
                  agentTrustScoreGenerationStatus: 'completed',
                  lastUpdatedAt: serverTimestamp(),
                  systemNotes: ["Workflow completed successfully by AI agents."],
-               });
+               }, { merge: true });
              }
           }, 1500);
         }, 1500);
