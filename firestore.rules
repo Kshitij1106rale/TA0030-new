@@ -6,9 +6,9 @@ service cloud.firestore {
      * VeriHire AI Security Rules
      * 
      * Philosophy:
-     * This ruleset implements a dual-role access model (HR and Candidate) with strict 
-     * structural segregation. The security model relies on path-based ownership 
-     * and role-based access verified via document existence.
+     * This ruleset implements a dual-role access model (HR and Candidate).
+     * HR personnel have broad read access and manage candidate creation.
+     * Candidates have ownership-based access to their own profile and documents.
      */
 
     // --- Helper Functions ---
@@ -22,88 +22,75 @@ service cloud.firestore {
     }
 
     function isHR() {
-      // Robust check for HR profile existence
+      // Check if the user has a document in the hr_profiles collection
       return isSignedIn() && exists(/databases/$(database)/documents/hr_profiles/$(request.auth.uid));
     }
 
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
-    }
-
-    function isExistingHR() {
-      return resource != null && isHR();
-    }
-
-    // --- Collection Rules ---
+    // --- HR Profile Rules ---
 
     match /hr_profiles/{hrProfileId} {
       allow get, list: if isOwner(hrProfileId);
-      allow create: if isOwner(hrProfileId) && request.resource.data.id == hrProfileId;
-      allow update, delete: if isExistingOwner(hrProfileId);
+      allow create: if isOwner(hrProfileId);
+      allow update, delete: if isOwner(hrProfileId);
     }
+
+    // --- Candidate Profile and Subcollections ---
 
     match /candidate_profiles/{candidateProfileId} {
       // HR can view all candidates; Candidates can view their own.
       allow get, list: if isOwner(candidateProfileId) || isHR();
       
-      // Allow creation if the user is the candidate themselves OR an authenticated HR personnel.
-      // We ensure the ID in the data matches the path to maintain data integrity.
-      allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.id == candidateProfileId;
+      // HR can create candidate profiles (invitations); Candidates can create their own.
+      allow create: if isOwner(candidateProfileId) || isHR();
       
-      // Allow updates if the user is the owner or an HR.
-      allow update: if isExistingOwner(candidateProfileId) || isHR();
-      allow delete: if isExistingOwner(candidateProfileId) || isHR();
+      // Both can update profile status or scores.
+      allow update: if isOwner(candidateProfileId) || isHR();
+      allow delete: if isHR();
 
       match /documents/{documentId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
-        allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.candidateProfileId == candidateProfileId;
-        allow update, delete: if isExistingOwner(candidateProfileId) || isHR();
+        allow create: if isOwner(candidateProfileId) || isHR();
+        allow update, delete: if isOwner(candidateProfileId) || isHR();
       }
 
       match /extracted_data/{extractedDataId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
-        allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.candidateProfileId == candidateProfileId;
-        allow update, delete: if resource != null && (isOwner(candidateProfileId) || isHR());
+        allow create: if isOwner(candidateProfileId) || isHR();
+        allow update, delete: if isOwner(candidateProfileId) || isHR();
 
         match /education_entries/{entryId} {
           allow get, list: if isOwner(candidateProfileId) || isHR();
-          allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.extractedDataId == extractedDataId;
-          allow update, delete: if resource != null && (isOwner(candidateProfileId) || isHR());
+          allow create, update, delete: if isOwner(candidateProfileId) || isHR();
         }
 
         match /experience_entries/{entryId} {
           allow get, list: if isOwner(candidateProfileId) || isHR();
-          allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.extractedDataId == extractedDataId;
-          allow update, delete: if resource != null && (isOwner(candidateProfileId) || isHR());
+          allow create, update, delete: if isOwner(candidateProfileId) || isHR();
         }
       }
 
       match /verification_workflows/{workflowId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
-        // Allow both HR and Owner to create/update. This supports the candidate-triggered simulation.
-        allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.candidateProfileId == candidateProfileId;
-        allow update: if isExistingOwner(candidateProfileId) || isHR();
+        allow create, update: if isOwner(candidateProfileId) || isHR();
         allow delete: if isHR();
 
         match /mismatches/{mismatchId} {
           allow get, list: if isOwner(candidateProfileId) || isHR();
-          allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.verificationWorkflowId == workflowId;
-          allow update: if isExistingOwner(candidateProfileId) || isHR();
+          allow create, update: if isOwner(candidateProfileId) || isHR();
           allow delete: if isHR();
         }
 
         match /employment_gaps/{gapId} {
           allow get, list: if isOwner(candidateProfileId) || isHR();
-          allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.verificationWorkflowId == workflowId;
-          allow update: if isExistingOwner(candidateProfileId) || isHR();
+          allow create, update: if isOwner(candidateProfileId) || isHR();
           allow delete: if isHR();
         }
       }
 
       match /hiring_decisions/{decisionId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
-        allow create: if isHR() && request.resource.data.hrProfileId == request.auth.uid && request.resource.data.candidateProfileId == candidateProfileId;
-        allow update, delete: if isExistingHR() && resource.data.hrProfileId == request.auth.uid;
+        allow create: if isHR();
+        allow update, delete: if isHR();
       }
     }
   }
