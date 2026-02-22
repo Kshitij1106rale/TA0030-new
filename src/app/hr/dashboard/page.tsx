@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -17,7 +16,6 @@ import {
   Plus
 } from 'lucide-react';
 import { 
-  Tooltip, 
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -28,7 +26,7 @@ import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const COLORS = ['#4B0082', '#8F00FF', '#FF8042', '#FF0000'];
 
@@ -58,10 +56,23 @@ export default function HRDashboard() {
 
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db) return;
+    if (!db || !firebaseUser) {
+      toast({
+        variant: "destructive",
+        title: "Action Denied",
+        description: "You must be logged in to add candidates.",
+      });
+      return;
+    }
     setIsSubmitting(true);
 
-    addDocumentNonBlocking(collection(db, 'candidate_profiles'), {
+    // Create a new document reference to get a generated ID
+    const candidateRef = doc(collection(db, 'candidate_profiles'));
+    const candidateId = candidateRef.id;
+
+    // Use setDocumentNonBlocking to include the ID in the data and the path
+    setDocumentNonBlocking(candidateRef, {
+      id: candidateId,
       fullName: newCandidate.fullName,
       email: newCandidate.email,
       role: newCandidate.role,
@@ -70,11 +81,11 @@ export default function HRDashboard() {
       fraudRiskScore: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+    }, { merge: true });
     
     toast({
-      title: "Candidate Added",
-      description: `${newCandidate.fullName} has been invited to the platform.`,
+      title: "Candidate Invited",
+      description: `${newCandidate.fullName} has been invited to start verification.`,
     });
     setIsAddDialogOpen(false);
     setNewCandidate({ fullName: "", email: "", role: "" });

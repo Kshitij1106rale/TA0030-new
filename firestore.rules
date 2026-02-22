@@ -9,95 +9,56 @@ service cloud.firestore {
      * This ruleset implements a dual-role access model (HR and Candidate) with strict 
      * structural segregation. The security model relies on path-based ownership 
      * and role-based access verified via document existence.
-     * 
-     * Data Structure:
-     * - /hr_profiles/{uid}: Root for HR metadata and role identification.
-     * - /candidate_profiles/{uid}: Root for candidate metadata and role identification.
-     * - All candidate data (documents, extracted info, workflows, decisions) is nested 
-     *   under the candidate's root profile to ensure clear ownership boundaries.
-     * 
-     * Key Security Decisions:
-     * 1. HR profiles are strictly private to the owner.
-     * 2. Candidate data is readable by any authenticated HR personnel but only 
-     *    writable by the candidate (or specific HR for decisions).
-     * 3. Authorization is optimized via denormalization: candidateProfileId is stored 
-     *    within sub-documents to avoid expensive path-walking.
-     * 4. Relational integrity is enforced at the document level for critical linking IDs.
      */
 
     // --- Helper Functions ---
 
-    /** @description Checks if the user is authenticated. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** @description Checks if the user's UID matches the provided ID. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** @description Checks if the user exists in the HR profiles collection. */
     function isHR() {
       return isSignedIn() && exists(/databases/$(database)/documents/hr_profiles/$(request.auth.uid));
     }
 
-    // `isCandidate` function has been removed as it was unused and causing warnings.
-
-    /** @description Combines ownership check with existence check for updates/deletes. */
     function isExistingOwner(userId) {
       return resource != null && isOwner(userId);
     }
 
-    /** @description Validates that the resource exists and the user is an HR member. */
     function isExistingHR() {
       return resource != null && isHR();
     }
 
     // --- Collection Rules ---
 
-    /**
-     * @description Stores HR personnel profiles. Serves as the source of truth for HR role status.
-     * @path /hr_profiles/{hrProfileId}
-     * @allow (get) If the user is the owner of the profile.
-     * @deny (list) If a user tries to browse other HR profiles.
-     * @principle Ownership-based root access control.
-     */
     match /hr_profiles/{hrProfileId} {
-      allow get: if isOwner(hrProfileId);
-      allow list: if isOwner(hrProfileId);
+      allow get, list: if isOwner(hrProfileId);
       allow create: if isOwner(hrProfileId) && request.resource.data.id == hrProfileId;
       allow update, delete: if isExistingOwner(hrProfileId);
     }
 
-    /**
-     * @description Stores Candidate profiles. Accessible by the candidate and all HR personnel.
-     * @path /candidate_profiles/{candidateProfileId}
-     * @allow (get) If user is candidate owner OR is any registered HR.
-     * @deny (update) If user is not the candidate owner.
-     * @principle Public (within app) read for HR, owner-only writes.
-     */
     match /candidate_profiles/{candidateProfileId} {
+      // HR can view all candidates; Candidates can view their own.
       allow get, list: if isOwner(candidateProfileId) || isHR();
-      allow create: if isOwner(candidateProfileId) && request.resource.data.id == candidateProfileId;
-      allow update, delete: if isExistingOwner(candidateProfileId);
+      
+      // Allow creation if the user is the candidate themselves OR an authenticated HR personnel.
+      // We enforce that the data.id must match the path ID for structural integrity.
+      allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.id == candidateProfileId;
+      
+      // Allow updates if the user is the owner or an HR (e.g., for flagging/verifying).
+      allow update: if isExistingOwner(candidateProfileId) || isHR();
+      allow delete: if isExistingOwner(candidateProfileId) || isHR();
 
-      /**
-       * @description Uploaded candidate documents (resumes, IDs).
-       * @path /candidate_profiles/{candidateProfileId}/documents/{documentId}
-       * @allow (create) If user is the candidate owner.
-       * @deny (get) If user is neither owner nor HR.
-       */
       match /documents/{documentId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
-        allow create: if isOwner(candidateProfileId) && request.resource.data.candidateProfileId == candidateProfileId;
-        allow update, delete: if isExistingOwner(candidateProfileId);
+        allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.candidateProfileId == candidateProfileId;
+        allow update, delete: if isExistingOwner(candidateProfileId) || isHR();
       }
 
-      /**
-       * @description OCR extracted data from documents.
-       * @path /candidate_profiles/{candidateProfileId}/extracted_data/{extractedDataId}
-       */
       match /extracted_data/{extractedDataId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
         allow create: if (isOwner(candidateProfileId) || isHR()) && request.resource.data.candidateProfileId == candidateProfileId;
@@ -116,11 +77,6 @@ service cloud.firestore {
         }
       }
 
-      /**
-       * @description Workflow tracking for AI agents and verification progress.
-       * @path /candidate_profiles/{candidateProfileId}/verification_workflows/{verificationWorkflowId}
-       * @allow (write) HR personnel only (simulating agent/system updates).
-       */
       match /verification_workflows/{workflowId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
         allow create: if isHR() && request.resource.data.candidateProfileId == candidateProfileId;
@@ -139,12 +95,6 @@ service cloud.firestore {
         }
       }
 
-      /**
-       * @description Final hiring decisions made by HR.
-       * @path /candidate_profiles/{candidateProfileId}/hiring_decisions/{hiringDecisionId}
-       * @allow (create) If user is an HR and provides their own UID as hrProfileId.
-       * @deny (create) If an HR tries to create a decision on behalf of another HR.
-       */
       match /hiring_decisions/{decisionId} {
         allow get, list: if isOwner(candidateProfileId) || isHR();
         allow create: if isHR() && request.resource.data.hrProfileId == request.auth.uid && request.resource.data.candidateProfileId == candidateProfileId;
