@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,7 +13,7 @@ interface CandidateCardProps {
   role: string;
   trustScore: number;
   risk: 'Low' | 'Medium' | 'High';
-  status: 'Verified' | 'Flagged' | 'Pending';
+  status: 'Verified' | 'Flagged' | 'Pending' | 'Rejected';
   image: string;
   onClick?: (id: string) => void;
 }
@@ -48,7 +47,13 @@ export function CandidateCard({ id, name, role, trustScore, risk, status, image,
 
           <div className="hidden md:flex flex-col items-start min-w-[100px]">
             <span className="text-[10px] text-slate-400 font-bold uppercase">Status</span>
-            <Badge variant={status === 'Verified' ? 'default' : status === 'Flagged' ? 'destructive' : 'secondary'} className="mt-1 h-5 text-[10px] uppercase">
+            <Badge 
+              variant={status === 'Verified' ? 'default' : status === 'Rejected' ? 'destructive' : status === 'Flagged' ? 'destructive' : 'secondary'} 
+              className={cn(
+                "mt-1 h-5 text-[10px] uppercase",
+                status === 'Rejected' && "bg-red-600 hover:bg-red-700"
+              )}
+            >
               {status}
             </Badge>
           </div>

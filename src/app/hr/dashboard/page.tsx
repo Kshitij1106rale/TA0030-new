@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -437,23 +436,35 @@ export default function HRDashboard() {
                 {isCandidatesLoading ? (
                   <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>
                 ) : processedCandidates.length > 0 ? (
-                  processedCandidates.map((c, i) => (
-                    <div key={c.id} className="relative">
-                      {i < 3 && <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-primary rounded-full shadow-lg" />}
-                      <CandidateCard 
-                        {...c}
-                        name={c.fullName}
-                        trustScore={c.trustScore || 0}
-                        risk={(c.fraudRiskScore || 0) > 60 ? 'High' : (c.fraudRiskScore || 0) > 20 ? 'Medium' : 'Low'}
-                        status={c.isShortlisted ? 'Verified' : c.profileStatus === 'verified' ? 'Verified' : 'Pending'}
-                        image={`https://picsum.photos/seed/${c.id}/200/200`}
-                        onClick={setSelectedCandidateId}
-                      />
-                      {c.isShortlisted && (
-                        <Badge className="absolute top-2 right-12 bg-green-500 hover:bg-green-600 border-none text-[8px] h-4">ELIGIBLE</Badge>
-                      )}
-                    </div>
-                  ))
+                  processedCandidates.map((c, i) => {
+                    // Logic to determine status badge
+                    let statusLabel: 'Verified' | 'Flagged' | 'Pending' | 'Rejected' = 'Pending';
+                    if (c.profileStatus === 'rejected') {
+                      statusLabel = 'Rejected';
+                    } else if (c.isShortlisted || c.profileStatus === 'verified') {
+                      statusLabel = 'Verified';
+                    } else if (c.fraudRiskScore > 60) {
+                      statusLabel = 'Flagged';
+                    }
+
+                    return (
+                      <div key={c.id} className="relative">
+                        {i < 3 && <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-primary rounded-full shadow-lg" />}
+                        <CandidateCard 
+                          {...c}
+                          name={c.fullName}
+                          trustScore={c.trustScore || 0}
+                          risk={(c.fraudRiskScore || 0) > 60 ? 'High' : (c.fraudRiskScore || 0) > 20 ? 'Medium' : 'Low'}
+                          status={statusLabel}
+                          image={`https://picsum.photos/seed/${c.id}/200/200`}
+                          onClick={setSelectedCandidateId}
+                        />
+                        {c.isShortlisted && (
+                          <Badge className="absolute top-2 right-12 bg-green-500 hover:bg-green-600 border-none text-[8px] h-4">ELIGIBLE</Badge>
+                        )}
+                      </div>
+                    )
+                  })
                 ) : (
                   <div className="text-center py-20 bg-white border rounded-xl border-dashed">No candidates match your criteria</div>
                 )}
@@ -617,6 +628,9 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
               <span className="text-slate-400 text-xs">•</span>
               <span className="text-slate-500 text-xs">{candidate.email}</span>
             </div>
+            {candidate.profileStatus === 'rejected' && (
+              <Badge className="mt-2 bg-red-600 hover:bg-red-700 h-6 px-3">REJECTED PROFILE</Badge>
+            )}
           </div>
         </div>
       </DialogHeader>
@@ -666,8 +680,11 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
         <Button variant="outline" className="flex-1 font-bold h-11" onClick={() => window.location.href=`mailto:${candidate.email}`}>
           <Mail className="w-4 h-4 mr-2" /> Contact
         </Button>
-        <Button className="flex-1 bg-red-600 hover:bg-red-700 font-bold h-11 shadow-lg shadow-red-200" onClick={() => handleAction('rejected')}>
-          Reject Profile
+        <Button 
+          className={cn("flex-1 bg-red-600 hover:bg-red-700 font-bold h-11 shadow-lg shadow-red-200", candidate.profileStatus === 'rejected' && "opacity-50 pointer-events-none")} 
+          onClick={() => handleAction('rejected')}
+        >
+          {candidate.profileStatus === 'rejected' ? 'Already Rejected' : 'Reject Profile'}
         </Button>
         <Button className="flex-1 bg-primary hover:bg-primary/90 font-bold h-11 shadow-lg shadow-primary/20" onClick={() => handleAction('verified')}>
           <CheckCircle2 className="w-4 h-4 mr-2" /> Approve
