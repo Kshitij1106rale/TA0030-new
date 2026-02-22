@@ -5,21 +5,26 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, ShieldAlert, MoreVertical } from 'lucide-react';
+import { MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CandidateCardProps {
+  id: string;
   name: string;
   role: string;
   trustScore: number;
   risk: 'Low' | 'Medium' | 'High';
   status: 'Verified' | 'Flagged' | 'Pending';
   image: string;
+  onClick?: (id: string) => void;
 }
 
-export function CandidateCard({ name, role, trustScore, risk, status, image }: CandidateCardProps) {
+export function CandidateCard({ id, name, role, trustScore, risk, status, image, onClick }: CandidateCardProps) {
   return (
-    <Card className="hover:shadow-md transition-all cursor-pointer group">
+    <Card 
+      className="hover:shadow-md transition-all cursor-pointer group border-slate-200"
+      onClick={() => onClick?.(id)}
+    >
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Avatar className="h-12 w-12 border-2 border-slate-100">
@@ -48,7 +53,7 @@ export function CandidateCard({ name, role, trustScore, risk, status, image }: C
             </Badge>
           </div>
 
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="group-hover:bg-slate-100">
             <MoreVertical className="w-4 h-4" />
           </Button>
         </div>

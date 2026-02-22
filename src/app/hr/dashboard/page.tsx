@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,11 @@ import {
   Plus,
   ShieldAlert,
   Loader2,
-  UserPlus
+  UserPlus,
+  ShieldCheck,
+  Mail,
+  Briefcase,
+  History
 } from 'lucide-react';
 import { 
   ResponsiveContainer,
@@ -25,18 +30,22 @@ import {
   Cell
 } from 'recharts';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, query, orderBy, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const COLORS = ['#4B0082', '#8F00FF', '#FF8042', '#FF0000'];
 
 export default function HRDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [newCandidate, setNewCandidate] = useState({ fullName: "", email: "", role: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -44,15 +53,13 @@ export default function HRDashboard() {
   const db = useFirestore();
   const { user: firebaseUser, isUserLoading: isAuthLoading } = useUser();
 
-  // Fetch HR Profile - we use this as a source of truth for role verification
   const hrProfileRef = useMemoFirebase(() => {
     if (!db || !firebaseUser) return null;
     return doc(db, 'hr_profiles', firebaseUser.uid);
   }, [db, firebaseUser]);
   
-  const { data: hrProfile, isLoading: isProfileLoading, error: profileError } = useDoc(hrProfileRef);
+  const { data: hrProfile, isLoading: isProfileLoading } = useDoc(hrProfileRef);
 
-  // Fetch Candidates - only query once we're sure the user is an HR
   const candidatesQuery = useMemoFirebase(() => {
     if (!db || !hrProfile) return null;
     return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
@@ -60,22 +67,14 @@ export default function HRDashboard() {
   
   const { data: candidates, isLoading: isCandidatesLoading } = useCollection(candidatesQuery);
 
+  const selectedCandidate = candidates?.find(c => c.id === selectedCandidateId);
+
   const handleAddCandidate = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!db || !firebaseUser || !hrProfile) {
-      toast({
-        variant: "destructive",
-        title: "Action Restricted",
-        description: "Your HR profile is still being verified. Please try again in a moment.",
-      });
-      return;
-    }
+    if (!db || !firebaseUser || !hrProfile) return;
     
     setIsSubmitting(true);
-
     try {
-      // Pre-generate ID to ensure structure and consistency
       const candidatesCol = collection(db, 'candidate_profiles');
       const candidateRef = doc(candidatesCol);
       const candidateId = candidateRef.id;
@@ -100,28 +99,14 @@ export default function HRDashboard() {
       setIsAddDialogOpen(false);
       setNewCandidate({ fullName: "", email: "", role: "" });
     } catch (err) {
-      console.error("Failed to add candidate:", err);
       toast({
         variant: "destructive",
         title: "Submission Failed",
-        description: "Could not add candidate profile. Please check your permissions.",
+        description: "Could not add candidate profile.",
       });
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleExportReport = () => {
-    toast({
-      title: "Intelligence Export",
-      description: "Generating your comprehensive candidate risk assessment report...",
-    });
-    setTimeout(() => {
-      toast({
-        title: "Export Successful",
-        description: "VeriHire_AI_Report.pdf has been downloaded.",
-      });
-    }, 2000);
   };
 
   const filteredCandidates = candidates?.filter(c => 
@@ -143,7 +128,6 @@ export default function HRDashboard() {
     { name: 'High Risk', value: highRiskCount },
   ];
 
-  // Show access denied if we finished loading and there's no HR profile
   if (!isAuthLoading && !isProfileLoading && !hrProfile && firebaseUser) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -155,7 +139,7 @@ export default function HRDashboard() {
              </div>
              <div className="space-y-2">
                <h2 className="text-2xl font-bold text-slate-900">Access Restricted</h2>
-               <p className="text-slate-500">Your account does not have HR administrator privileges. Please contact support if you believe this is an error.</p>
+               <p className="text-slate-500">Your account does not have HR administrator privileges.</p>
              </div>
              <Button variant="outline" onClick={() => window.location.href = '/'}>Return to Home</Button>
            </div>
@@ -176,17 +160,14 @@ export default function HRDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="gap-2" onClick={handleExportReport}>
+            <Button variant="outline" className="gap-2">
               <Download className="w-4 h-4" /> Export
             </Button>
             
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  className="bg-primary hover:bg-primary/90 gap-2 shadow-lg shadow-primary/20" 
-                  disabled={isProfileLoading || !hrProfile}
-                >
-                  {isProfileLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <Button className="bg-primary hover:bg-primary/90 gap-2 shadow-lg shadow-primary/20">
+                  <Plus className="w-4 h-4" />
                   Add Candidate
                 </Button>
               </DialogTrigger>
@@ -196,46 +177,24 @@ export default function HRDashboard() {
                     <UserPlus className="w-5 h-5 text-primary" />
                     Invite Candidate
                   </DialogTitle>
-                  <DialogDescription>
-                    Fill in the details below to add a candidate and trigger the AI verification agents.
-                  </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddCandidate} className="space-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input 
-                      id="name" 
-                      placeholder="e.g. Jane Smith" 
-                      required 
-                      value={newCandidate.fullName}
-                      onChange={(e) => setNewCandidate({...newCandidate, fullName: e.target.value})}
-                    />
+                    <Input id="name" placeholder="e.g. Jane Smith" required value={newCandidate.fullName} onChange={(e) => setNewCandidate({...newCandidate, fullName: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="jane@company.com" 
-                      required 
-                      value={newCandidate.email}
-                      onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})}
-                    />
+                    <Input id="email" type="email" placeholder="jane@company.com" required value={newCandidate.email} onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="role">Applied Role</Label>
-                    <Input 
-                      id="role" 
-                      placeholder="e.g. Senior Software Engineer" 
-                      required 
-                      value={newCandidate.role}
-                      onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})}
-                    />
+                    <Input id="role" placeholder="e.g. Senior Software Engineer" required value={newCandidate.role} onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})} />
                   </div>
                   <DialogFooter className="mt-6 flex gap-2">
                     <Button type="button" variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit" disabled={isSubmitting} className="min-w-[140px]">
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                       Send Invitation
                     </Button>
                   </DialogFooter>
@@ -275,20 +234,21 @@ export default function HRDashboard() {
                 ) : filteredCandidates.length > 0 ? (
                   filteredCandidates.map((c) => (
                     <CandidateCard 
-                      key={c.id} 
+                      key={c.id}
+                      id={c.id}
                       name={c.fullName} 
                       role={c.role || "Candidate"} 
                       trustScore={c.trustScore || 0} 
                       risk={(c.fraudRiskScore || 0) > 60 ? 'High' : (c.fraudRiskScore || 0) > 20 ? 'Medium' : 'Low'}
                       status={c.profileStatus === 'verified' ? 'Verified' : c.profileStatus === 'rejected' ? 'Flagged' : 'Pending'}
                       image={`https://picsum.photos/seed/${c.id}/200/200`} 
+                      onClick={setSelectedCandidateId}
                     />
                   ))
                 ) : (
                   <div className="text-center py-20 bg-slate-50/50 rounded-lg border border-dashed">
                     <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
                     <p className="text-slate-500 font-medium">No candidates found</p>
-                    <p className="text-slate-400 text-sm">Try adjusting your search filters.</p>
                   </div>
                 )}
               </CardContent>
@@ -331,6 +291,125 @@ export default function HRDashboard() {
           </div>
         </div>
       </main>
+
+      {/* Candidate Detail Dialog */}
+      <Dialog open={!!selectedCandidateId} onOpenChange={(open) => !open && setSelectedCandidateId(null)}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          {selectedCandidate && (
+            <CandidateDetailView candidate={selectedCandidate} />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CandidateDetailView({ candidate }: { candidate: any }) {
+  const db = useFirestore();
+  const workflowRef = useMemoFirebase(() => {
+    if (!db || !candidate.id) return null;
+    return doc(db, 'candidate_profiles', candidate.id, 'verification_workflows', 'main');
+  }, [db, candidate.id]);
+
+  const { data: workflow, isLoading } = useDoc(workflowRef);
+
+  const workflowSteps = {
+    extraction: (workflow?.agentDocumentExtractionStatus as AgentStep) || 'idle',
+    comparison: (workflow?.agentDataComparisonStatus as AgentStep) || 'idle',
+    fraud: (workflow?.agentFraudDetectionStatus as AgentStep) || 'idle',
+    scoring: (workflow?.agentTrustScoreGenerationStatus as AgentStep) || 'idle',
+  };
+
+  return (
+    <div className="space-y-6">
+      <DialogHeader>
+        <div className="flex items-center gap-4 mb-2">
+          <Avatar className="h-16 w-16 border-2 border-primary/10">
+            <AvatarImage src={`https://picsum.photos/seed/${candidate.id}/200/200`} />
+            <AvatarFallback>{candidate.fullName?.charAt(0)}</AvatarFallback>
+          </Avatar>
+          <div>
+            <DialogTitle className="text-2xl font-bold">{candidate.fullName}</DialogTitle>
+            <DialogDescription className="flex items-center gap-4 mt-1">
+              <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {candidate.email}</span>
+              <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" /> {candidate.role || 'Candidate'}</span>
+            </DialogDescription>
+          </div>
+        </div>
+      </DialogHeader>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="bg-slate-50 border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold uppercase text-slate-500">Risk Assessment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between items-end">
+                <span className="text-sm font-medium">Trust Score</span>
+                <span className="text-2xl font-extrabold text-primary">{candidate.trustScore || 0}%</span>
+              </div>
+              <Progress value={candidate.trustScore || 0} className="h-2 bg-slate-200" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-end">
+                <span className="text-sm font-medium">Fraud Risk</span>
+                <span className="text-2xl font-extrabold text-red-500">{candidate.fraudRiskScore || 0}%</span>
+              </div>
+              <Progress value={candidate.fraudRiskScore || 0} className="h-2 bg-slate-200" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-50 border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold uppercase text-slate-500">System Activity</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+             <div className="flex justify-between text-xs">
+               <span className="text-slate-500">Status</span>
+               <Badge variant={candidate.profileStatus === 'verified' ? 'default' : 'secondary'}>{candidate.profileStatus}</Badge>
+             </div>
+             <div className="flex justify-between text-xs">
+               <span className="text-slate-500">Registered</span>
+               <span className="font-medium">{new Date(candidate.createdAt).toLocaleDateString()}</span>
+             </div>
+             <div className="flex justify-between text-xs">
+               <span className="text-slate-500">Last Verified</span>
+               <span className="font-medium">{workflow?.lastUpdatedAt ? new Date(workflow.lastUpdatedAt.toDate()).toLocaleDateString() : 'Never'}</span>
+             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h4 className="font-bold text-sm flex items-center gap-2">
+          <History className="w-4 h-4 text-primary" />
+          AI Agent Workflow Status
+        </h4>
+        {isLoading ? (
+          <div className="h-32 flex items-center justify-center bg-slate-50 rounded-xl">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+          </div>
+        ) : (
+          <WorkflowStatus steps={workflowSteps} />
+        )}
+      </div>
+
+      <Alert className="bg-primary/5 border-primary/20">
+        <ShieldCheck className="h-5 w-5 text-primary" />
+        <AlertTitle className="font-bold text-primary">Intelligence Summary</AlertTitle>
+        <AlertDescription className="mt-2 text-slate-700 leading-relaxed text-sm">
+          {workflow?.systemNotes?.[0] || "No AI analysis notes available for this candidate yet. Complete the verification workflow to generate insights."}
+        </AlertDescription>
+      </Alert>
+
+      <DialogFooter>
+        <Button variant="outline" className="w-full sm:w-auto">Contact Candidate</Button>
+        <Button className="w-full sm:w-auto" variant={candidate.profileStatus === 'verified' ? 'destructive' : 'default'}>
+          {candidate.profileStatus === 'verified' ? 'Flag Profile' : 'Approve Candidate'}
+        </Button>
+      </DialogFooter>
     </div>
   );
 }
