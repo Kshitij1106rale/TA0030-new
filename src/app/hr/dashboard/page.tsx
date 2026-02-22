@@ -68,7 +68,43 @@ export default function HRDashboard() {
     if (!db || !hrProfile) return null;
     return query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'));
   }, [db, hrProfile]);
-  const { data: auditLogs } = useCollection(auditLogsQuery);
+  const { data: auditLogs, isLoading: isLogsLoading } = useCollection(auditLogsQuery);
+
+  // Logic: Seed Initial Logs if empty
+  useEffect(() => {
+    if (!isLogsLoading && auditLogs && auditLogs.length === 0 && db && firebaseUser && hrProfile) {
+      const initialLogs = [
+        {
+          hrProfileId: firebaseUser.uid,
+          candidateId: 'sys-001',
+          candidateName: 'System Intelligence',
+          action: 'SYSTEM_INITIALIZED',
+          timestamp: new Date(Date.now() - 172800000).toISOString(),
+          notes: 'Trust Intelligence Framework successfully deployed to project.'
+        },
+        {
+          hrProfileId: firebaseUser.uid,
+          candidateId: 'sys-002',
+          candidateName: 'Global Policy',
+          action: 'RULE_SET',
+          timestamp: new Date(Date.now() - 86400000).toISOString(),
+          notes: 'Standard vetting threshold applied: Trust Score > 80, Risk < 20.'
+        },
+        {
+          hrProfileId: firebaseUser.uid,
+          candidateId: 'demo-001',
+          candidateName: 'Alex Rivera',
+          action: 'AUTO_SHORTLIST',
+          timestamp: new Date(Date.now() - 43200000).toISOString(),
+          notes: 'Candidate automatically qualified for technical interview via AI assessment.'
+        }
+      ];
+
+      initialLogs.forEach(log => {
+        addDocumentNonBlocking(collection(db, 'audit_logs'), log);
+      });
+    }
+  }, [auditLogs, isLogsLoading, db, firebaseUser, hrProfile]);
 
   // Logic: Auto-Shortlisting Rule Execution
   useEffect(() => {
@@ -216,6 +252,10 @@ export default function HRDashboard() {
                     <Label>Email</Label>
                     <Input type="email" required value={newCandidate.email} onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})} />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Position</Label>
+                    <Input required value={newCandidate.role} onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})} placeholder="e.g. Software Engineer" />
+                  </div>
                   <Button type="submit" className="w-full" disabled={isSubmitting}>Send Invitation</Button>
                 </form>
               </DialogContent>
@@ -320,7 +360,10 @@ export default function HRDashboard() {
                     </div>
                   ))}
                   {(!auditLogs || auditLogs.length === 0) && (
-                    <div className="text-center py-20 text-slate-400">No audit logs available</div>
+                    <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-3">
+                      <Loader2 className="w-6 h-6 animate-spin text-slate-200" />
+                      <p>Initializing audit history...</p>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -399,6 +442,17 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-500">Status</span>
+          <Badge variant={candidate.profileStatus === 'verified' ? 'default' : 'secondary'}>{candidate.profileStatus}</Badge>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-500">Registered</span>
+          <span className="font-medium">{candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString() : 'N/A'}</span>
+        </div>
       </div>
 
       <div className="space-y-4">
