@@ -10,32 +10,36 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+const ExperienceSchema = z.object({
+  companyName: z.string().describe('The name of the company.'),
+  jobTitle: z.string().describe('The candidate\'s job title at the company.'),
+  startDate: z.string().describe('The start date of employment in YYYY-MM-DD format.'),
+  endDate: z.string().describe('The end date of employment in YYYY-MM-DD format, or "Present" if currently employed.'),
+});
+
 const ExtractCandidateDocumentDataInputSchema = z.object({
   resumePdfDataUri: z
     .string()
     .describe(
-      "A candidate's resume document (e.g., PDF, image), as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A candidate's resume document, as a data URI."
     ),
   experienceLetterPdfDataUri: z
     .string()
     .describe(
-      "A candidate's experience letter document (e.g., PDF, image), as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A candidate's experience letter document, as a data URI."
     ),
+  idProofPdfDataUri: z
+    .string()
+    .optional()
+    .describe("A candidate's ID proof document (e.g., Passport, Aadhar), as a data URI."),
 });
 export type ExtractCandidateDocumentDataInput = z.infer<typeof ExtractCandidateDocumentDataInputSchema>;
 
 const ExtractCandidateDocumentDataOutputSchema = z.object({
-  name: z.string().describe('The full name of the candidate.'),
-  experiences: z
-    .array(
-      z.object({
-        companyName: z.string().describe('The name of the company.'),
-        jobTitle: z.string().describe('The candidate\u0027s job title at the company.'),
-        startDate: z.string().describe('The start date of employment in YYYY-MM format.'),
-        endDate: z.string().describe('The end date of employment in YYYY-MM format, or "Present" if currently employed.'),
-      })
-    )
-    .describe('A list of employment experiences extracted from the documents.'),
+  name: z.string().describe('The full name of the candidate found in the documents.'),
+  resumeExperiences: z.array(ExperienceSchema).describe('Experiences extracted specifically from the resume.'),
+  letterExperiences: z.array(ExperienceSchema).describe('Experiences extracted specifically from the experience letter.'),
+  idProofInfo: z.string().describe('Key summary of information found on the ID proof (e.g., name, DOB).'),
 });
 export type ExtractCandidateDocumentDataOutput = z.infer<typeof ExtractCandidateDocumentDataOutputSchema>;
 
@@ -49,7 +53,16 @@ const extractCandidateDocumentDataPrompt = ai.definePrompt({
   name: 'extractCandidateDocumentDataPrompt',
   input: {schema: ExtractCandidateDocumentDataInputSchema},
   output: {schema: ExtractCandidateDocumentDataOutputSchema},
-  prompt: `You are an expert document analysis AI. Your task is to accurately extract key information from a candidate's resume and experience letter.\n\nCarefully review both documents provided.\n\nFrom the Resume and Experience Letter, extract the following information:\n1.  **Candidate's Full Name**: Identify the candidate's full name.\n2.  **Employment Experiences**: For each distinct employment period, identify the company name, the job title, the start date, and the end date. If the candidate is currently employed at a company, set the end date as "Present". Dates should be in YYYY-MM format.\n\nCombine information from both documents, prioritizing consistency. If there's a discrepancy, use your best judgment to determine the most accurate information.\n\nOutput the extracted data in a structured JSON format matching the provided schema.\n\nResume: {{media url=resumePdfDataUri}}\nExperience Letter: {{media url=experienceLetterPdfDataUri}}`,
+  prompt: `You are an expert document analysis AI. Your task is to extract information from three sources: a Resume, an Experience Letter, and an ID Proof.
+
+1. **Candidate Name**: Identify the candidate's full name across all documents.
+2. **Resume Experiences**: Extract all work experiences listed on the Resume. Ensure dates are in YYYY-MM-DD format.
+3. **Experience Letter Experiences**: Extract all work experiences mentioned in the Experience Letter. Ensure dates are in YYYY-MM-DD format.
+4. **ID Proof Info**: Summarize the key identity details found on the ID proof (Name, Date of Birth, ID Number if visible).
+
+Resume: {{media url=resumePdfDataUri}}
+Experience Letter: {{media url=experienceLetterPdfDataUri}}
+ID Proof: {{#if idProofPdfDataUri}}{{media url=idProofPdfDataUri}}{{else}}Not Provided{{/if}}`,
 });
 
 const extractCandidateDocumentDataFlow = ai.defineFlow(

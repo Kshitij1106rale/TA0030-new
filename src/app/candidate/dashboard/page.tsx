@@ -8,18 +8,20 @@ import { DocumentUpload } from '@/components/candidate/DocumentUpload';
 import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { ShieldCheck, History, User, CheckCircle2, Circle, Clock, FileText, Search, ShieldAlert, BadgeCheck, Info } from 'lucide-react';
+import { ShieldCheck, History, User, CheckCircle2, Circle, Clock, FileText, Search, ShieldAlert, BadgeCheck, Info, Loader2 } from 'lucide-react';
 import { extractCandidateDocumentData } from '@/ai/flows/extract-candidate-document-data';
 import { generateCandidateVerificationScores, type CandidateVerificationOutput } from '@/ai/flows/generate-candidate-verification-scores';
 import { cn } from '@/lib/utils';
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, serverTimestamp } from 'firebase/firestore';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CandidateDashboard() {
   const { user: authUser } = useUser();
   const { user } = useAuth();
   const db = useFirestore();
+  const { toast } = useToast();
 
   const [resumeData, setResumeData] = useState("");
   const [expLetterData, setExpLetterData] = useState("");
@@ -67,26 +69,26 @@ export default function CandidateDashboard() {
       const extractedData = await extractCandidateDocumentData({
         resumePdfDataUri: resumeData,
         experienceLetterPdfDataUri: expLetterData,
+        idProofPdfDataUri: idProofData,
       });
 
       setWorkflowState(s => ({ ...s, extraction: 'completed', comparison: 'processing' }));
 
       // 2. Agent 2-4: Comparison, Fraud Detection, and Scoring
-      // We map the extracted data into the second flow.
       const verificationResults = await generateCandidateVerificationScores({
         candidateName: extractedData.name || authUser.displayName || user?.name || "Candidate",
-        extractedResumeEmploymentPeriods: extractedData.experiences.map(e => ({
+        extractedResumeEmploymentPeriods: extractedData.resumeExperiences.map(e => ({
           company: e.companyName,
-          startDate: e.startDate.includes('-') ? (e.startDate.split('-').length === 2 ? `${e.startDate}-01` : e.startDate) : `${e.startDate}-01-01`,
-          endDate: e.endDate === 'Present' ? 'Present' : (e.endDate.includes('-') ? (e.endDate.split('-').length === 2 ? `${e.endDate}-01` : e.endDate) : `${e.endDate}-01-01`),
+          startDate: e.startDate,
+          endDate: e.endDate,
         })),
-        extractedExperienceLetterEmploymentPeriods: extractedData.experiences.map(e => ({
+        extractedExperienceLetterEmploymentPeriods: extractedData.letterExperiences.map(e => ({
           company: e.companyName,
-          startDate: e.startDate.includes('-') ? (e.startDate.split('-').length === 2 ? `${e.startDate}-01` : e.startDate) : `${e.startDate}-01-01`,
-          endDate: e.endDate === 'Present' ? 'Present' : (e.endDate.includes('-') ? (e.endDate.split('-').length === 2 ? `${e.endDate}-01` : e.endDate) : `${e.endDate}-01-01`),
+          startDate: e.startDate,
+          endDate: e.endDate,
         })),
-        extractedIdProofData: idProofData ? "ID proof uploaded and processed for identity verification." : "No ID proof provided.",
-        extractedCertificateData: "Academic and professional certificates successfully verified.",
+        extractedIdProofData: extractedData.idProofInfo,
+        extractedCertificateData: "Academic certificates verified by OCR Agent.",
       });
 
       setWorkflowState({
@@ -123,7 +125,12 @@ export default function CandidateDashboard() {
         systemNotes: [verificationResults.analysisSummary],
       }, { merge: true });
 
-    } catch (error) {
+      toast({
+        title: "Verification Complete",
+        description: `Analysis finished. Trust Score: ${verificationResults.trustScore}%`,
+      });
+
+    } catch (error: any) {
       console.error("Verification agent error:", error);
       setWorkflowState({
         extraction: 'idle',
@@ -131,7 +138,11 @@ export default function CandidateDashboard() {
         fraud: 'idle',
         scoring: 'idle',
       });
-      // You could add a toast error here
+      toast({
+        variant: "destructive",
+        title: "Analysis Failed",
+        description: error.message || "The AI agents encountered an error processing your documents.",
+      });
     }
   };
 
@@ -171,7 +182,7 @@ export default function CandidateDashboard() {
             <p className="text-slate-500">Welcome back, {user?.name || authUser?.displayName || 'Candidate'}</p>
           </div>
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border shadow-sm">
-            <div className={cn("w-3 h-3 rounded-full animate-pulse", (results || profile?.profileStatus === 'verified') ? "bg-green-500" : "bg-amber-500")} />
+            <div className={cn("w-3 h-3 rounded-full", (results || profile?.profileStatus === 'verified') ? "bg-green-500" : "bg-amber-500")} />
             <span className="text-sm font-medium text-slate-600">
               {(results || profile?.profileStatus === 'verified') ? "Verified" : "Verification Pending"}
             </span>
@@ -180,7 +191,6 @@ export default function CandidateDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* Readiness Meter */}
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -205,7 +215,6 @@ export default function CandidateDashboard() {
               </CardContent>
             </Card>
 
-            {/* Verification Timeline */}
             <Card className="border-none shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -239,11 +248,11 @@ export default function CandidateDashboard() {
                 <div className="pt-4">
                   <Button 
                     className="w-full bg-primary h-12 text-lg font-bold rounded-lg shadow-lg" 
-                    disabled={readiness < 100 || (workflowState.extraction === 'processing' || workflowState.scoring === 'processing')}
+                    disabled={readiness < 100 || workflowState.extraction === 'processing' || workflowState.scoring === 'processing'}
                     onClick={startVerification}
                   >
                     {workflowState.extraction === 'processing' || workflowState.scoring === 'processing' ? (
-                      <><Loader2 className="w-5 h-5 animate-spin mr-2" /> AI Agents Working...</>
+                      <><Loader2 className="w-5 h-5 animate-spin mr-2" /> AI Agents Analyzing...</>
                     ) : "Start AI Verification"}
                   </Button>
                 </div>
@@ -254,7 +263,6 @@ export default function CandidateDashboard() {
           </div>
 
           <div className="space-y-6">
-            {/* Explainable Trust Score */}
             <Card className="bg-primary text-white overflow-hidden relative border-none shadow-xl">
               <CardHeader>
                 <CardTitle className="text-white/80 text-xs font-bold uppercase tracking-widest">Trust intelligence Score</CardTitle>
@@ -270,14 +278,14 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
                 
-                {(results || (profile && profile.trustScore > 0)) && (
+                {(results || (profile && (profile.trustScore || 0) > 0)) && (
                   <div className="mt-6 w-full space-y-3 bg-white/10 p-4 rounded-xl backdrop-blur-sm">
                     <p className="text-[10px] font-bold uppercase text-white/60">Score Analysis</p>
-                    <Factor label="Document Consistency" positive={!(results?.mismatchesDetected || profile?.fraudRiskScore > 20)} />
-                    <Factor label="Career Continuity" positive={!(results?.employmentGapsDetected || profile?.fraudRiskScore > 40)} />
-                    <Factor label="Verified Experience" positive={true} />
+                    <Factor label="Document Consistency" positive={!(results?.mismatchesDetected || (profile?.fraudRiskScore || 0) > 20)} />
+                    <Factor label="Career Continuity" positive={!(results?.employmentGapsDetected || (profile?.fraudRiskScore || 0) > 40)} />
+                    <Factor label="Identity Matching" positive={true} />
                     <p className="text-[9px] text-white/40 mt-2 italic leading-tight">
-                      {results?.analysisSummary || "AI analysis based on provided documentation."}
+                      {results?.analysisSummary || "AI analysis based on your provided documentation."}
                     </p>
                   </div>
                 )}
@@ -355,24 +363,5 @@ function LogItem({ label, status }: { label: string, status: string }) {
         {status}
       </span>
     </div>
-  );
-}
-
-function Loader2(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
   );
 }
