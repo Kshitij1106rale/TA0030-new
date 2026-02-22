@@ -30,11 +30,11 @@ import {
   Cell
 } from 'recharts';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, serverTimestamp } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { WorkflowStatus, AgentStep } from '@/components/agentic/WorkflowStatus';
@@ -307,6 +307,8 @@ export default function HRDashboard() {
 
 function CandidateDetailView({ candidate }: { candidate: any }) {
   const db = useFirestore();
+  const { toast } = useToast();
+  
   const workflowRef = useMemoFirebase(() => {
     if (!db || !candidate.id) return null;
     return doc(db, 'candidate_profiles', candidate.id, 'verification_workflows', 'main');
@@ -319,6 +321,31 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
     comparison: (workflow?.agentDataComparisonStatus as AgentStep) || 'idle',
     fraud: (workflow?.agentFraudDetectionStatus as AgentStep) || 'idle',
     scoring: (workflow?.agentTrustScoreGenerationStatus as AgentStep) || 'idle',
+  };
+
+  const handleContactCandidate = () => {
+    window.location.href = `mailto:${candidate.email}?subject=Regarding your VeriHire AI verification`;
+    toast({
+      title: "Opening Email Client",
+      description: `Drafting message to ${candidate.fullName}...`,
+    });
+  };
+
+  const handleToggleStatus = () => {
+    if (!db) return;
+    const isVerified = candidate.profileStatus === 'verified';
+    const newStatus = isVerified ? 'rejected' : 'verified';
+    const profileRef = doc(db, 'candidate_profiles', candidate.id);
+    
+    updateDocumentNonBlocking(profileRef, {
+      profileStatus: newStatus,
+      updatedAt: serverTimestamp(),
+    });
+
+    toast({
+      title: isVerified ? "Profile Flagged" : "Profile Approved",
+      description: `${candidate.fullName}'s status has been updated to ${newStatus}.`,
+    });
   };
 
   return (
@@ -369,7 +396,9 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
           <CardContent className="space-y-3">
              <div className="flex justify-between text-xs">
                <span className="text-slate-500">Status</span>
-               <Badge variant={candidate.profileStatus === 'verified' ? 'default' : 'secondary'}>{candidate.profileStatus}</Badge>
+               <Badge variant={candidate.profileStatus === 'verified' ? 'default' : candidate.profileStatus === 'rejected' ? 'destructive' : 'secondary'}>
+                 {candidate.profileStatus}
+               </Badge>
              </div>
              <div className="flex justify-between text-xs">
                <span className="text-slate-500">Registered</span>
@@ -405,9 +434,16 @@ function CandidateDetailView({ candidate }: { candidate: any }) {
         </AlertDescription>
       </Alert>
 
-      <DialogFooter>
-        <Button variant="outline" className="w-full sm:w-auto">Contact Candidate</Button>
-        <Button className="w-full sm:w-auto" variant={candidate.profileStatus === 'verified' ? 'destructive' : 'default'}>
+      <DialogFooter className="flex-col sm:flex-row gap-2">
+        <Button variant="outline" className="w-full sm:flex-1" onClick={handleContactCandidate}>
+          <Mail className="w-4 h-4 mr-2" />
+          Contact Candidate
+        </Button>
+        <Button 
+          className="w-full sm:flex-1" 
+          variant={candidate.profileStatus === 'verified' ? 'destructive' : 'default'}
+          onClick={handleToggleStatus}
+        >
           {candidate.profileStatus === 'verified' ? 'Flag Profile' : 'Approve Candidate'}
         </Button>
       </DialogFooter>
