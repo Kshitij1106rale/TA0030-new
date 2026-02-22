@@ -33,9 +33,9 @@
     },
     {
       "id": "how-it-works",
-      "description": "Professional job interview and recruitment process",
-      "imageUrl": "https://picsum.photos/seed/recruit/600/800",
-      "imageHint": "job hiring"
+      "description": "A professional job interview setting representing the recruitment process",
+      "imageUrl": "https://picsum.photos/seed/interview-pro/600/800",
+      "imageHint": "job interview"
     }
   ]
 }
