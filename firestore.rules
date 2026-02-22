@@ -1,17 +1,7 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * VeriHire AI Security Rules
-     * 
-     * Philosophy:
-     * This ruleset implements a dual-role access model (HR and Candidate).
-     * HR personnel have broad read access and manage candidate creation.
-     * Candidates have ownership-based access to their own profile and documents.
-     */
-
-    // --- Helper Functions ---
 
     function isSignedIn() {
       return request.auth != null;
@@ -22,76 +12,33 @@ service cloud.firestore {
     }
 
     function isHR() {
-      // Check if the user has a document in the hr_profiles collection
       return isSignedIn() && exists(/databases/$(database)/documents/hr_profiles/$(request.auth.uid));
     }
 
-    function isCandidate() {
-      // Check if the user has a document in the candidate_profiles collection
-      return isSignedIn() && exists(/databases/$(database)/documents/candidate_profiles/$(request.auth.uid));
-    }
-
-    // --- HR Profile Rules ---
-
     match /hr_profiles/{hrProfileId} {
-      allow get, list, create, update, delete: if isOwner(hrProfileId);
+      allow get, list, create, update: if isOwner(hrProfileId);
     }
-
-    // --- Candidate Profile and Subcollections ---
 
     match /candidate_profiles/{candidateProfileId} {
-      // HR can view all candidates; Candidates can view their own.
       allow get, list: if isHR() || isOwner(candidateProfileId);
-      
-      // HR can create candidate profiles; Candidates can create their own during registration.
       allow create: if isHR() || isOwner(candidateProfileId);
-      
-      // Both can update profile status or scores.
       allow update: if isHR() || isOwner(candidateProfileId);
       allow delete: if isHR();
 
       match /documents/{documentId} {
-        allow get, list: if isHR() || isOwner(candidateProfileId);
-        allow create, update, delete: if isHR() || isOwner(candidateProfileId);
-      }
-
-      match /extracted_data/{extractedDataId} {
-        allow get, list: if isHR() || isOwner(candidateProfileId);
-        allow create, update, delete: if isHR() || isOwner(candidateProfileId);
-
-        match /education_entries/{entryId} {
-          allow get, list: if isHR() || isOwner(candidateProfileId);
-          allow create, update, delete: if isHR() || isOwner(candidateProfileId);
-        }
-
-        match /experience_entries/{entryId} {
-          allow get, list: if isHR() || isOwner(candidateProfileId);
-          allow create, update, delete: if isHR() || isOwner(candidateProfileId);
-        }
+        allow read: if isHR() || isOwner(candidateProfileId);
+        allow write: if isHR() || isOwner(candidateProfileId);
       }
 
       match /verification_workflows/{workflowId} {
-        allow get, list: if isHR() || isOwner(candidateProfileId);
-        allow create, update: if isHR() || isOwner(candidateProfileId);
-        allow delete: if isHR();
-
-        match /mismatches/{mismatchId} {
-          allow get, list: if isHR() || isOwner(candidateProfileId);
-          allow create, update: if isHR() || isOwner(candidateProfileId);
-          allow delete: if isHR();
-        }
-
-        match /employment_gaps/{gapId} {
-          allow get, list: if isHR() || isOwner(candidateProfileId);
-          allow create, update: if isHR() || isOwner(candidateProfileId);
-          allow delete: if isHR();
-        }
+        allow read: if isHR() || isOwner(candidateProfileId);
+        allow write: if isHR() || isOwner(candidateProfileId);
       }
+    }
 
-      match /hiring_decisions/{decisionId} {
-        allow get, list: if isHR() || isOwner(candidateProfileId);
-        allow create, update, delete: if isHR();
-      }
+    match /audit_logs/{logId} {
+      allow list, get: if isHR();
+      allow create: if isHR();
     }
   }
 }
