@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,8 @@ import {
   Download,
   Plus,
   ShieldAlert,
-  Loader2
+  Loader2,
+  UserPlus
 } from 'lucide-react';
 import { 
   ResponsiveContainer,
@@ -24,7 +25,7 @@ import {
   Cell
 } from 'recharts';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, serverTimestamp } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -38,31 +39,35 @@ export default function HRDashboard() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newCandidate, setNewCandidate] = useState({ fullName: "", email: "", role: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const { toast } = useToast();
   const db = useFirestore();
-  const { user: firebaseUser } = useUser();
+  const { user: firebaseUser, isUserLoading: isAuthLoading } = useUser();
 
-  // Fetch HR Profile
+  // Fetch HR Profile - we use this as a source of truth for role verification
   const hrProfileRef = useMemoFirebase(() => {
     if (!db || !firebaseUser) return null;
     return doc(db, 'hr_profiles', firebaseUser.uid);
   }, [db, firebaseUser]);
+  
   const { data: hrProfile, isLoading: isProfileLoading, error: profileError } = useDoc(hrProfileRef);
 
-  // Fetch Candidates
+  // Fetch Candidates - only query once we're sure the user is an HR
   const candidatesQuery = useMemoFirebase(() => {
-    if (!db || !firebaseUser || !hrProfile) return null;
+    if (!db || !hrProfile) return null;
     return query(collection(db, 'candidate_profiles'), orderBy('createdAt', 'desc'));
-  }, [db, firebaseUser, hrProfile]);
+  }, [db, hrProfile]);
+  
   const { data: candidates, isLoading: isCandidatesLoading } = useCollection(candidatesQuery);
 
   const handleAddCandidate = (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!db || !firebaseUser || !hrProfile) {
       toast({
         variant: "destructive",
-        title: "Action Denied",
-        description: "Waiting for profile verification...",
+        title: "Action Restricted",
+        description: "Your HR profile is still being verified. Please try again in a moment.",
       });
       return;
     }
@@ -70,7 +75,9 @@ export default function HRDashboard() {
     setIsSubmitting(true);
 
     try {
-      const candidateRef = doc(collection(db, 'candidate_profiles'));
+      // Pre-generate ID to ensure structure and consistency
+      const candidatesCol = collection(db, 'candidate_profiles');
+      const candidateRef = doc(candidatesCol);
       const candidateId = candidateRef.id;
 
       setDocumentNonBlocking(candidateRef, {
@@ -87,16 +94,17 @@ export default function HRDashboard() {
       
       toast({
         title: "Candidate Invited",
-        description: `${newCandidate.fullName} has been added to the system.`,
+        description: `${newCandidate.fullName} has been added and will receive an invitation email.`,
       });
       
       setIsAddDialogOpen(false);
       setNewCandidate({ fullName: "", email: "", role: "" });
     } catch (err) {
+      console.error("Failed to add candidate:", err);
       toast({
         variant: "destructive",
-        title: "Failed to Add Candidate",
-        description: "An unexpected error occurred.",
+        title: "Submission Failed",
+        description: "Could not add candidate profile. Please check your permissions.",
       });
     } finally {
       setIsSubmitting(false);
@@ -105,15 +113,15 @@ export default function HRDashboard() {
 
   const handleExportReport = () => {
     toast({
-      title: "Generating Report",
-      description: "Your comprehensive intelligence report is being prepared.",
+      title: "Intelligence Export",
+      description: "Generating your comprehensive candidate risk assessment report...",
     });
     setTimeout(() => {
       toast({
-        title: "Report Exported",
-        description: "VeriHire_Report.pdf has been saved.",
+        title: "Export Successful",
+        description: "VeriHire_AI_Report.pdf has been downloaded.",
       });
-    }, 1500);
+    }, 2000);
   };
 
   const filteredCandidates = candidates?.filter(c => 
@@ -135,18 +143,22 @@ export default function HRDashboard() {
     { name: 'High Risk', value: highRiskCount },
   ];
 
-  if (profileError) {
+  // Show access denied if we finished loading and there's no HR profile
+  if (!isAuthLoading && !isProfileLoading && !hrProfile && firebaseUser) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
-        <main className="container mx-auto px-4 py-12">
-           <Alert variant="destructive" className="max-w-2xl mx-auto">
-             <ShieldAlert className="h-4 w-4" />
-             <AlertTitle>Access Denied</AlertTitle>
-             <AlertDescription>
-               We couldn't verify your HR credentials. Please ensure you are logged in as an HR administrator.
-             </AlertDescription>
-           </Alert>
+        <main className="container mx-auto px-4 py-16 text-center">
+           <div className="max-w-md mx-auto space-y-6">
+             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+               <ShieldAlert className="w-10 h-10 text-red-600" />
+             </div>
+             <div className="space-y-2">
+               <h2 className="text-2xl font-bold text-slate-900">Access Restricted</h2>
+               <p className="text-slate-500">Your account does not have HR administrator privileges. Please contact support if you believe this is an error.</p>
+             </div>
+             <Button variant="outline" onClick={() => window.location.href = '/'}>Return to Home</Button>
+           </div>
         </main>
       </div>
     );
@@ -159,7 +171,9 @@ export default function HRDashboard() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="font-headline text-3xl font-bold text-slate-900">HR Intelligence Dashboard</h1>
-            <p className="text-slate-500">Real-time candidate risk assessment and verification status.</p>
+            <p className="text-slate-500">
+              {isProfileLoading ? "Verifying access..." : `Welcome back, ${hrProfile?.fullName || 'Recruiter'}`}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" className="gap-2" onClick={handleExportReport}>
@@ -168,16 +182,22 @@ export default function HRDashboard() {
             
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-primary gap-2" disabled={isProfileLoading || !hrProfile}>
+                <Button 
+                  className="bg-primary hover:bg-primary/90 gap-2 shadow-lg shadow-primary/20" 
+                  disabled={isProfileLoading || !hrProfile}
+                >
                   {isProfileLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Add Candidate
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Invite New Candidate</DialogTitle>
+                  <DialogTitle className="flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-primary" />
+                    Invite Candidate
+                  </DialogTitle>
                   <DialogDescription>
-                    Add a candidate to initiate the automated AI verification workflow.
+                    Fill in the details below to add a candidate and trigger the AI verification agents.
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddCandidate} className="space-y-4 pt-4">
@@ -185,7 +205,7 @@ export default function HRDashboard() {
                     <Label htmlFor="name">Full Name</Label>
                     <Input 
                       id="name" 
-                      placeholder="John Doe" 
+                      placeholder="e.g. Jane Smith" 
                       required 
                       value={newCandidate.fullName}
                       onChange={(e) => setNewCandidate({...newCandidate, fullName: e.target.value})}
@@ -196,7 +216,7 @@ export default function HRDashboard() {
                     <Input 
                       id="email" 
                       type="email" 
-                      placeholder="john@company.com" 
+                      placeholder="jane@company.com" 
                       required 
                       value={newCandidate.email}
                       onChange={(e) => setNewCandidate({...newCandidate, email: e.target.value})}
@@ -206,17 +226,17 @@ export default function HRDashboard() {
                     <Label htmlFor="role">Applied Role</Label>
                     <Input 
                       id="role" 
-                      placeholder="Senior Developer" 
+                      placeholder="e.g. Senior Software Engineer" 
                       required 
                       value={newCandidate.role}
                       onChange={(e) => setNewCandidate({...newCandidate, role: e.target.value})}
                     />
                   </div>
-                  <DialogFooter className="mt-6">
-                    <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit" disabled={isSubmitting}>
+                  <DialogFooter className="mt-6 flex gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={isSubmitting} className="min-w-[140px]">
                       {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Invite Candidate
+                      Send Invitation
                     </Button>
                   </DialogFooter>
                 </form>
@@ -234,23 +254,23 @@ export default function HRDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <Card className="border-none shadow-sm">
-              <CardHeader className="pb-0">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-white border-b pb-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <Input 
-                    placeholder="Search candidates by name or email..." 
-                    className="pl-10" 
+                    placeholder="Filter by name, email, or role..." 
+                    className="pl-10 bg-slate-50 border-none" 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </CardHeader>
-              <CardContent className="pt-6 space-y-3">
-                {isCandidatesLoading ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-2">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-sm text-slate-400">Syncing Intelligence Data...</p>
+              <CardContent className="pt-6 space-y-3 bg-white">
+                {isCandidatesLoading || isProfileLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary opacity-40" />
+                    <p className="text-sm text-slate-400 animate-pulse">Syncing verification data...</p>
                   </div>
                 ) : filteredCandidates.length > 0 ? (
                   filteredCandidates.map((c) => (
@@ -259,15 +279,16 @@ export default function HRDashboard() {
                       name={c.fullName} 
                       role={c.role || "Candidate"} 
                       trustScore={c.trustScore || 0} 
-                      risk={c.fraudRiskScore > 60 ? 'High' : c.fraudRiskScore > 20 ? 'Medium' : 'Low'}
+                      risk={(c.fraudRiskScore || 0) > 60 ? 'High' : (c.fraudRiskScore || 0) > 20 ? 'Medium' : 'Low'}
                       status={c.profileStatus === 'verified' ? 'Verified' : c.profileStatus === 'rejected' ? 'Flagged' : 'Pending'}
                       image={`https://picsum.photos/seed/${c.id}/200/200`} 
                     />
                   ))
                 ) : (
-                  <div className="text-center py-12">
+                  <div className="text-center py-20 bg-slate-50/50 rounded-lg border border-dashed">
                     <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                    <p className="text-slate-400">No candidates match your criteria.</p>
+                    <p className="text-slate-500 font-medium">No candidates found</p>
+                    <p className="text-slate-400 text-sm">Try adjusting your search filters.</p>
                   </div>
                 )}
               </CardContent>
@@ -275,29 +296,36 @@ export default function HRDashboard() {
           </div>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-white border-b">
                 <CardTitle className="text-lg">Risk Insights</CardTitle>
-                <CardDescription>Major risk categories detected among candidates.</CardDescription>
+                <CardDescription>Major risk categories detected across your talent pool.</CardDescription>
               </CardHeader>
-              <CardContent className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={riskDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {riskDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
+              <CardContent className="h-[300px] pt-6 bg-white flex items-center justify-center">
+                {totalCandidates > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={riskDistribution}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={100}
+                        paddingAngle={8}
+                        dataKey="value"
+                      >
+                        {riskDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-white stroke-2" />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-slate-400 space-y-2">
+                    <TrendingUp className="w-10 h-10 mx-auto opacity-20" />
+                    <p className="text-sm">No data to visualize</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -309,15 +337,15 @@ export default function HRDashboard() {
 
 function StatCard({ title, value, icon, trend }: { title: string, value: string, icon: React.ReactNode, trend: string }) {
   return (
-    <Card className="border-none shadow-sm overflow-hidden bg-white">
+    <Card className="border-none shadow-sm overflow-hidden bg-white hover:shadow-md transition-all">
       <CardContent className="p-6">
         <div className="flex justify-between items-start mb-4">
-          <div className="p-2 rounded-lg bg-slate-50">{icon}</div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter bg-slate-100 px-2 py-0.5 rounded-full">{trend}</span>
+          <div className="p-2.5 rounded-xl bg-slate-50">{icon}</div>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 py-0.5 rounded-full">{trend}</span>
         </div>
         <div>
-          <h3 className="text-slate-500 text-sm font-medium">{title}</h3>
-          <p className="text-2xl font-extrabold text-slate-900 mt-1">{value}</p>
+          <h3 className="text-slate-500 text-sm font-semibold tracking-tight">{title}</h3>
+          <p className="text-3xl font-extrabold text-slate-900 mt-1">{value}</p>
         </div>
       </CardContent>
     </Card>
